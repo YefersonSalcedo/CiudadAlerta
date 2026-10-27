@@ -1,5 +1,6 @@
 package com.ciudadalerta.data.model
 
+import com.ciudadalerta.data.config.CiudadAlertaConfig
 import com.google.firebase.firestore.DocumentId
 
 enum class EstadoIncidencia { ACTIVA, RESUELTA, ARCHIVADA }
@@ -39,7 +40,24 @@ data class Incidencia(
     val ultimaVerificacionNotificada: Long = System.currentTimeMillis(),
     val severidadEstimada: String = "Media",
     val ocultoDelMapa: Boolean = false
-)
+) {
+    fun necesitaReverificacion(ahora: Long = System.currentTimeMillis()): Boolean {
+        if (estado != EstadoIncidencia.ACTIVA) return false
+        val msLimite = CiudadAlertaConfig.TIEMPO_REVERIFICACION_X_HORAS * 3600 * 1000L
+        val ultimaAct = maxOf(fechaCreacion, ultimaVerificacionNotificada)
+        return (ahora - ultimaAct) >= msLimite
+    }
+
+    fun esVisible(ahora: Long = System.currentTimeMillis()): Boolean {
+        if (ocultoDelMapa) return false
+        if (estado == EstadoIncidencia.ARCHIVADA) return false
+        if (estado == EstadoIncidencia.RESUELTA && fechaResuelta != null) {
+            val msVisibles = CiudadAlertaConfig.DIAS_VISIBLE_RESUELTA * 86400 * 1000L
+            if (ahora - fechaResuelta > msVisibles) return false
+        }
+        return true
+    }
+}
 
 data class Reporte(
     @DocumentId val id: String = "",

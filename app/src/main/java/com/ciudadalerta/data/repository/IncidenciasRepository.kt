@@ -42,7 +42,8 @@ class IncidenciasRepository(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val lista = snapshot?.toObjects(Incidencia::class.java) ?: emptyList()
+                val lista = snapshot?.toObjects(Incidencia::class.java)
+                    ?.filter { it.esVisible() } ?: emptyList()
                 trySend(lista)
             }
         awaitClose { listener.remove() }
@@ -52,7 +53,7 @@ class IncidenciasRepository(
         latitud: Double,
         longitud: Double,
         categoria: String,
-        radioMetros: Double
+        radioMetros: Double = CiudadAlertaConfig.RADIO_AGRUPACION_DEFAULT_METROS
     ): List<Incidencia> {
         val snapshot = incidenciasCol
             .whereEqualTo("estado", EstadoIncidencia.ACTIVA.name)
@@ -62,7 +63,7 @@ class IncidenciasRepository(
             .await()
 
         return snapshot.toObjects(Incidencia::class.java).filter { inc ->
-            GeoUtils.distanciaMetros(latitud, longitud, inc.ubicacion.latitud, inc.ubicacion.longitud) <= radioMetros
+            inc.esVisible() && GeoUtils.distanciaMetros(latitud, longitud, inc.ubicacion.latitud, inc.ubicacion.longitud) <= radioMetros
         }
     }
 
@@ -121,7 +122,10 @@ class IncidenciasRepository(
         val snap = incRef.get().await()
         val estado = snap.getString("estado")
 
-        val updates = mutableMapOf<String, Any>("contadorReportes" to FieldValue.increment(1))
+        val updates = mutableMapOf<String, Any>(
+            "contadorReportes" to FieldValue.increment(1),
+            "ultimaVerificacionNotificada" to System.currentTimeMillis()
+        )
         if (estado == EstadoIncidencia.RESUELTA.name) {
             updates["estado"] = EstadoIncidencia.ACTIVA.name
             updates["marcasResuelto"] = 0
@@ -141,6 +145,17 @@ class IncidenciasRepository(
         if (ref.get().await().exists()) return false
 
         ref.set(Denuncia(usuarioId, contenidoId, motivo, detalles)).await()
+
+        val incRef = incidenciasCol.document(contenidoId)
+        val incSnap = incRef.get().await()
+        if (incSnap.exists()) {
+            val totalDenuncias = (incSnap.getLong("denunciasCount") ?: 0) + 1
+            val updates = mutableMapOf<String, Any>("denunciasCount" to totalDenuncias)
+            if (totalDenuncias >= CiudadAlertaConfig.DENUNCIAS_PARA_OCULTAR_M) {
+                updates["ocultoDelMapa"] = true
+            }
+            incRef.update(updates).await()
+        }
         return true
     }
 

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ciudadalerta.data.ai.GeminiAnalysisService
+import com.ciudadalerta.data.config.CiudadAlertaConfig
 import com.ciudadalerta.data.model.*
 import com.ciudadalerta.data.repository.IncidenciasRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,7 +105,7 @@ class ReportViewModel(
         }
     }
 
-    fun buscarDuplicados(radioMetros: Double = 100.0) {
+    fun buscarDuplicados(radioMetros: Double = CiudadAlertaConfig.RADIO_AGRUPACION_DEFAULT_METROS) {
         viewModelScope.launch {
             try {
                 val lista = incidenciasRepository.buscarSimilares(

@@ -187,6 +187,30 @@ fun IncidentDetailContent(
                     )
                 }
 
+                if (inc?.necesitaReverificacion() == true) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Warning, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Atención: Esta incidencia lleva más de 48h sin actualizaciones. Por favor re-verifica si continúa allí o si ya fue solucionada.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+
                 item {
                     Text("¿PASASTE POR AQUÍ RECIENTEMENTE?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = OutlineColor)
                     Spacer(modifier = Modifier.height(6.dp))
