@@ -13,7 +13,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ciudadalerta.ui.map.MapViewModel
 import com.ciudadalerta.ui.theme.*
@@ -57,10 +59,30 @@ fun NotificationsContent(
         },
         bottomBar = {
             NavigationBar(containerColor = SurfaceContainerLowest) {
-                NavigationBarItem(selected = false, onClick = onNavigateToMap, icon = { Icon(Icons.Default.Map, null) }, label = { Text("Mapa") })
-                NavigationBarItem(selected = false, onClick = onNavigateToMyReports, icon = { Icon(Icons.Default.Assignment, null) }, label = { Text("Mis reportes") })
-                NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Default.Notifications, null) }, label = { Text("Notificaciones") })
-                NavigationBarItem(selected = false, onClick = onNavigateToProfile, icon = { Icon(Icons.Default.AccountCircle, null) }, label = { Text("Perfil") })
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToMap,
+                    icon = { Icon(Icons.Default.Map, null) },
+                    label = { Text("Mapa", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToMyReports,
+                    icon = { Icon(Icons.Default.Assignment, null) },
+                    label = { Text("Reportes", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+                )
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {},
+                    icon = { Icon(Icons.Default.Notifications, null) },
+                    label = { Text("Alertas", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToProfile,
+                    icon = { Icon(Icons.Default.AccountCircle, null) },
+                    label = { Text("Perfil", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+                )
             }
         }
     ) { padding ->

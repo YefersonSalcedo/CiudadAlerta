@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -189,7 +190,14 @@ private fun SelectorCapasMapa(
 
 @Composable
 private fun EtiquetaNav(texto: String) {
-    Text(texto, maxLines = 1, softWrap = false, fontSize = 11.sp)
+    Text(
+        text = texto,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -256,14 +264,14 @@ fun MapScreenContent(
                 NavigationBarItem(
                     selected = false,
                     onClick = onNavigateToMyReports,
-                    icon = { Icon(Icons.Default.Assignment, contentDescription = "Mis reportes") },
-                    label = { EtiquetaNav("Mis reportes") }
+                    icon = { Icon(Icons.Default.Assignment, contentDescription = "Reportes") },
+                    label = { EtiquetaNav("Reportes") }
                 )
                 NavigationBarItem(
                     selected = false,
                     onClick = onNavigateToNotifications,
-                    icon = { Icon(Icons.Default.Notifications, contentDescription = "Notificaciones") },
-                    label = { EtiquetaNav("Notificaciones") }
+                    icon = { Icon(Icons.Default.Notifications, contentDescription = "Alertas") },
+                    label = { EtiquetaNav("Alertas") }
                 )
                 NavigationBarItem(
                     selected = false,
