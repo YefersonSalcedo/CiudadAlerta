@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pin con el interior recortado (even-odd) para icono temático -->
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M54,84 C54,84 33,63 33,46 A21,21 0 1 1 75,46 C75,63 54,84 54,84 Z M54,46 m-14,0 a14,14 0 1 1 28,0 a14,14 0 1 1 -28,0 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M51.2,37.5 L56.8,37.5 L56,50.5 L52,50.5 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,53.2 m-2.8,0 a2.8,2.8 0 1 1 5.6,0 a2.8,2.8 0 1 1 -5.6,0" />
+</vector>
