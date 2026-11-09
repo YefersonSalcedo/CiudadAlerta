@@ -19,6 +19,7 @@ val OnSecondaryFixed = Color(0xFF2E1500)
 val TertiaryGreen = Color(0xFF005C15)
 val TertiaryContainer = Color(0xFF25752B)
 val OnTertiary = Color(0xFFFFFFFF)
+val OnTertiaryContainer = Color(0xFFDFF3E0)
 val TertiaryFixed = Color(0xFFA3F69C)
 val OnTertiaryFixed = Color(0xFF002204)
 

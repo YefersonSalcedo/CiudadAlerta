@@ -20,7 +20,6 @@ class IncidenciasRepository(
 ) {
     private val incidenciasCol = firestore.collection("incidencias")
     private val reportesCol = firestore.collection("reportes")
-    private val comentariosCol = firestore.collection("comentarios")
     private val marcasResueltoCol = firestore.collection("marcasResuelto")
     private val denunciasCol = firestore.collection("denuncias")
 
@@ -159,8 +158,8 @@ class IncidenciasRepository(
         return true
     }
 
-    fun observarComentarios(incidenciaId: String): Flow<List<Comentario>> = callbackFlow {
-        val listener = comentariosCol
+    fun observarReportes(incidenciaId: String): Flow<List<Reporte>> = callbackFlow {
+        val listener = reportesCol
             .whereEqualTo("incidenciaId", incidenciaId)
             .orderBy("fecha", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
@@ -168,13 +167,9 @@ class IncidenciasRepository(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                trySend(snap?.toObjects(Comentario::class.java) ?: emptyList())
+                trySend(snap?.toObjects(Reporte::class.java) ?: emptyList())
             }
         awaitClose { listener.remove() }
-    }
-
-    suspend fun publicarComentario(comentario: Comentario) {
-        comentariosCol.document().set(comentario).await()
     }
 
     suspend fun obtenerIncidenciaPorId(incidenciaId: String): Incidencia? {

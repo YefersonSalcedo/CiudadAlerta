@@ -17,7 +17,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.ciudadalerta.data.config.CiudadAlertaConfig
 import com.ciudadalerta.data.model.Denuncia
+import com.ciudadalerta.data.model.EstadoIncidencia
+import com.ciudadalerta.data.model.Reporte
 import com.ciudadalerta.data.util.TimeUtils
 import com.ciudadalerta.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
@@ -43,12 +46,17 @@ fun IncidentDetailScreen(
 
     val incidenciaDetail by viewModel.incidencia.collectAsState()
     val comentariosList by viewModel.comentarios.collectAsState()
+    val reportesList by viewModel.reportes.collectAsState()
     val cargando by viewModel.cargando.collectAsState()
+    val currentUserId = authUser?.uid ?: ""
+    val esReportante = incidenciaDetail?.reportantesIds?.contains(currentUserId) == true
 
     IncidentDetailContent(
         incidenciaDetail = incidenciaDetail,
         comentariosList = comentariosList,
+        reportesList = reportesList,
         cargando = cargando,
+        esReportante = esReportante,
         onBack = onBack,
         onDenounceSubmit = { motivo, detalles ->
             viewModel.denunciarIncidencia(
@@ -79,7 +87,9 @@ fun IncidentDetailScreen(
 fun IncidentDetailContent(
     incidenciaDetail: Incidencia?,
     comentariosList: List<Comentario>,
+    reportesList: List<Reporte>,
     cargando: Boolean,
+    esReportante: Boolean = false,
     onBack: () -> Unit,
     onDenounceSubmit: (MotivoDenuncia, String?) -> Unit,
     onSendComment: (String) -> Unit,
@@ -118,7 +128,7 @@ fun IncidentDetailContent(
         bottomBar = {
             Surface(color = SurfaceContainerLowest, shadowElevation = 8.dp) {
                 Row(
-                    modifier = Modifier.padding(12.dp).navigationBarsPadding(),
+                    modifier = Modifier.padding(12.dp).navigationBarsPadding().imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
@@ -187,11 +197,11 @@ fun IncidentDetailContent(
                     )
                 }
 
-                if (inc?.necesitaReverificacion() == true) {
+                if (esReportante && inc?.necesitaReverificacion() == true) {
                     item {
                         Surface(
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            color = TertiaryContainer,
+                            contentColor = OnTertiaryContainer,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
@@ -199,10 +209,10 @@ fun IncidentDetailContent(
                                 modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Warning, contentDescription = null)
+                                Icon(Icons.Default.Info, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Atención: Esta incidencia lleva más de 48h sin actualizaciones. Por favor re-verifica si continúa allí o si ya fue solucionada.",
+                                    text = "Llevas más de 48 h sin actualizar este reporte. ¿Sigue ahí o ya se solucionó?",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -212,7 +222,29 @@ fun IncidentDetailContent(
                 }
 
                 item {
-                    Text("¿PASASTE POR AQUÍ RECIENTEMENTE?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = OutlineColor)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("¿PASASTE POR AQUÍ RECIENTEMENTE?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = OutlineColor)
+                        Spacer(modifier = Modifier.weight(1f))
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    if (inc?.estado == EstadoIncidencia.RESUELTA) "Resuelta" else "Activa",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = if (inc?.estado == EstadoIncidencia.RESUELTA) TertiaryContainer else PrimaryContainer,
+                                labelColor = if (inc?.estado == EstadoIncidencia.RESUELTA) OnTertiaryContainer else OnPrimaryContainer
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "${inc?.contadorReportes ?: 1} reportes • Resuelto: ${inc?.marcasResuelto ?: 0} de ${CiudadAlertaConfig.MARCAS_PARA_RESOLVER_N}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
@@ -223,7 +255,7 @@ fun IncidentDetailContent(
                         ) {
                             Icon(Icons.Default.ThumbUp, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sigue ahí (${inc?.contadorReportes ?: 1})")
+                            Text("Sigue ahí")
                         }
                         Button(
                             onClick = onResuelto,
@@ -233,7 +265,7 @@ fun IncidentDetailContent(
                         ) {
                             Icon(Icons.Default.TaskAlt, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Ya se arregló (${inc?.marcasResuelto ?: 0})")
+                            Text("Ya se solucionó")
                         }
                     }
                 }
@@ -247,6 +279,58 @@ fun IncidentDetailContent(
                         Icon(if (isFollowing) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isFollowing) "Siguiendo esta novedad" else "Seguir esta incidencia")
+                    }
+                }
+
+                item {
+                    HorizontalDivider()
+                    Text("Reportes del grupo (${reportesList.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+
+                if (reportesList.isEmpty()) {
+                    item {
+                        Text(
+                            "Aún no hay reportes adicionales para esta incidencia.",
+                            color = OnSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                } else {
+                    items(reportesList, key = { it.id }) { reporte ->
+                        Surface(shape = RoundedCornerShape(12.dp), color = SurfaceContainerLowest, shadowElevation = 1.dp) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (reporte.fotoUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = reporte.fotoUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp))
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        reporte.usuarioNombre.ifBlank { "Ciudadano" },
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (reporte.descripcion.isNotBlank()) {
+                                        Text(
+                                            reporte.descripcion,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = OnSurfaceVariant,
+                                            maxLines = 2
+                                        )
+                                    }
+                                    Text(
+                                        TimeUtils.tiempoTranscurrido(reporte.fecha),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = OutlineColor
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -318,7 +402,19 @@ fun IncidentDetailScreenPreview() {
                     fecha = System.currentTimeMillis() - 1800000
                 )
             ),
+            reportesList = listOf(
+                Reporte(
+                    id = "r1",
+                    incidenciaId = "1",
+                    usuarioId = "u1",
+                    usuarioNombre = "Ana Torres",
+                    fotoUrl = "",
+                    descripcion = "El hueco sigue aumentando.",
+                    fecha = System.currentTimeMillis() - 7200000
+                )
+            ),
             cargando = false,
+            esReportante = true,
             onBack = {},
             onDenounceSubmit = { _, _ -> },
             onSendComment = {},
