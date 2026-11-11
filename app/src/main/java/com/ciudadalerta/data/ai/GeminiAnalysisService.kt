@@ -156,7 +156,7 @@ class GeminiAnalysisService {
 
     private companion object {
         const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-        const val MODELO = "gemini-3.5-flash"
+        const val MODELO = "gemini-3.5-flash-lite"
     }
 
 
