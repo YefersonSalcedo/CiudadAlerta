@@ -29,6 +29,7 @@ data class Incidencia(
     val categoria: String = Categoria.Otros.nombre,
     val ubicacion: Ubicacion = Ubicacion(),
     val contadorReportes: Int = 1,
+    val contadorConfirmaciones: Int = 0,
     val estado: EstadoIncidencia = EstadoIncidencia.ACTIVA,
     val fotoPrincipalUrl: String = "",
     val marcasResuelto: Int = 0,
@@ -39,7 +40,8 @@ data class Incidencia(
     val fechaResuelta: Long? = null,
     val ultimaVerificacionNotificada: Long = System.currentTimeMillis(),
     val severidadEstimada: String = "Media",
-    val ocultoDelMapa: Boolean = false
+    val ocultoDelMapa: Boolean = false,
+    val descripcion: String = ""
 ) {
     fun necesitaReverificacion(ahora: Long = System.currentTimeMillis()): Boolean {
         if (estado != EstadoIncidencia.ACTIVA) return false

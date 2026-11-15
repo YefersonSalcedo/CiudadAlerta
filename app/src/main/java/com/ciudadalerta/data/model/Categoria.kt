@@ -1,31 +1,103 @@
 package com.ciudadalerta.data.model
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.RestoreFromTrash
+import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.ui.graphics.vector.ImageVector
+
 sealed class Categoria(
     val nombre: String,
-    val colorHex: Long
+    val colorHex: Long,
+    val icono: ImageVector
 ) {
-    object Vias : Categoria("Vías", 0xFFE65100)
-    object Alumbrado : Categoria("Alumbrado público", 0xFFF57F17)
-    object Residuos : Categoria("Residuos y aseo", 0xFF00897B)
-    object Parques : Categoria("Parques y zonas verdes", 0xFF2E7D32)
-    object Semaforos : Categoria("Semáforos", 0xFFD32F2F)
-    object Arboles : Categoria("Árboles (sin riesgo inminente)", 0xFF5D4037)
-    object Animales : Categoria("Animales abandonados", 0xFF7B1FA2)
-    object Otros : Categoria("Otros", 0xFF546E7A)
+    object Vias : Categoria(
+        nombre = "Vías",
+        colorHex = 0xFFE65100,
+        icono = Icons.Default.ReportProblem
+    )
+
+    object Alumbrado : Categoria(
+        nombre = "Alumbrado público",
+        colorHex = 0xFFF57F17,
+        icono = Icons.Default.Lightbulb
+    )
+
+    object Residuos : Categoria(
+        nombre = "Residuos y aseo",
+        colorHex = 0xFF00897B,
+        icono = Icons.Default.RestoreFromTrash
+    )
+
+    object Parques : Categoria(
+        nombre = "Parques y zonas verdes",
+        colorHex = 0xFF2E7D32,
+        icono = Icons.Default.Park
+    )
+
+    object Semaforos : Categoria(
+        nombre = "Semáforos",
+        colorHex = 0xFFD32F2F,
+        icono = Icons.Default.Traffic
+    )
+
+    object Arboles : Categoria(
+        nombre = "Árboles (sin riesgo inminente)",
+        colorHex = 0xFF5D4037,
+        icono = Icons.Default.Forest
+    )
+
+    object Animales : Categoria(
+        nombre = "Animales abandonados",
+        colorHex = 0xFF7B1FA2,
+        icono = Icons.Default.Pets
+    )
+
+    object Otros : Categoria(
+        nombre = "Otros",
+        colorHex = 0xFF546E7A,
+        icono = Icons.Default.MoreHoriz
+    )
 
     companion object {
-        val CATALOGO = listOf(Vias, Alumbrado, Residuos, Parques, Semaforos, Arboles, Animales, Otros)
+        val CATALOGO = listOf(
+            Vias,
+            Alumbrado,
+            Residuos,
+            Parques,
+            Semaforos,
+            Arboles,
+            Animales,
+            Otros
+        )
 
         val CATEGORIAS_BLOQUEADAS = setOf(
-            "EMERGENCIA", "DELITO", "ROBO", "SALUD", "ACCIDENTE_GRAVE",
-            "INCENDIO", "HERIDOS", "ARMA", "VIOLENCIA"
+            "EMERGENCIA",
+            "DELITO",
+            "ROBO",
+            "SALUD",
+            "ACCIDENTE_GRAVE",
+            "INCENDIO",
+            "HERIDOS",
+            "ARMA",
+            "VIOLENCIA"
         )
 
         fun fromString(nombreRaw: String?): Categoria {
             if (nombreRaw.isNullOrBlank()) return Otros
-            val lower = nombreRaw.lowercase()
-            return CATALOGO.firstOrNull { 
-                it.nombre.lowercase().contains(lower) || lower.contains(it.nombre.lowercase()) 
+
+            val nombre = nombreRaw.trim()
+
+            return CATALOGO.firstOrNull {
+                it.nombre.equals(nombre, ignoreCase = true)
+            } ?: CATALOGO.firstOrNull {
+                it.nombre.contains(nombre, ignoreCase = true) ||
+                        nombre.contains(it.nombre, ignoreCase = true)
             } ?: Otros
         }
     }

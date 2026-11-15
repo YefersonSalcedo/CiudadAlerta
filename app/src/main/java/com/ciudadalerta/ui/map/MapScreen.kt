@@ -43,6 +43,11 @@ import com.google.maps.android.compose.*
 import androidx.compose.ui.tooling.preview.Preview
 import com.ciudadalerta.data.model.Incidencia
 import com.ciudadalerta.data.model.Ubicacion
+import com.ciudadalerta.data.model.EstadoIncidencia
+
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 
 // Oculta los POIs y el transporte de Google para que solo resalten las incidencias.
 // Nota: si el mapa usa un Map ID (estilo en la nube), este JSON se ignora y los POIs
@@ -303,37 +308,144 @@ fun MapScreenContent(
                 onMapClick = { onSelectIncident(null) }
             ) {
                 incidenciasList.forEach { inc ->
-                    val colorCategoria = Categoria.CATALOGO
-                        .find { it.nombre.equals(inc.categoria, ignoreCase = true) }
-                        ?.let { Color(it.colorHex) } ?: PrimaryDark
-                    val seleccionada = selectedIncident?.id == inc.id
+                    key(inc.id) {
+                        val categoria = Categoria.fromString(inc.categoria)
+                        val seleccionada = selectedIncident?.id == inc.id
+                        val resuelta = inc.estado == EstadoIncidencia.RESUELTA
 
-                    MarkerComposable(
-                        inc.id, inc.categoria, seleccionada,
-                        state = rememberMarkerState(
-                            key = inc.id,
-                            position = LatLng(inc.ubicacion.latitud, inc.ubicacion.longitud)
-                        ),
-                        anchor = Offset(0.5f, 0.5f),
-                        onClick = {
-                            onSelectIncident(inc)
-                            true
+                        val destacada =
+                            inc.estado == EstadoIncidencia.ACTIVA &&
+                                    inc.contadorReportes >= MapViewModel.MIN_REPORTES_DESTACADA
+
+                        val colorMarcador = if (resuelta) {
+                            Color(0xFF1565C0)
+                        } else {
+                            Color(categoria.colorHex)
                         }
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = colorCategoria,
-                            border = BorderStroke(2.dp, Color.White),
-                            shadowElevation = 4.dp,
-                            modifier = Modifier.size(if (seleccionada) 44.dp else 36.dp)
+
+                        val iconoMarcador = if (resuelta) {
+                            Icons.Default.CheckCircle
+                        } else {
+                            categoria.icono
+                        }
+
+                        val tamanoMarcador = when {
+                            seleccionada -> 56.dp
+                            destacada -> 50.dp
+                            else -> 40.dp
+                        }
+
+                        val colorBorde = if (destacada) {
+                            Color(0xFFFFD600)
+                        } else {
+                            Color.White
+                        }
+
+                        val estadoMarcador = rememberMarkerState(
+                            key = inc.id,
+                            position = LatLng(
+                                inc.ubicacion.latitud,
+                                inc.ubicacion.longitud
+                            )
+                        )
+
+                        LaunchedEffect(
+                            inc.ubicacion.latitud,
+                            inc.ubicacion.longitud
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            estadoMarcador.position = LatLng(
+                                inc.ubicacion.latitud,
+                                inc.ubicacion.longitud
+                            )
+                        }
+
+                        MarkerComposable(
+                            inc.id,
+                            inc.categoria,
+                            inc.estado,
+                            inc.contadorReportes,
+                            seleccionada,
+                            destacada,
+                            state = estadoMarcador,
+                            title = inc.titulo,
+                            snippet = if (resuelta) {
+                                "Resuelta · ${inc.contadorReportes} reportes"
+                            } else {
+                                "${categoria.nombre} · ${inc.contadorReportes} reportes"
+                            },
+                            anchor = Offset(0.5f, 0.5f),
+                            zIndex = when {
+                                seleccionada -> 3f
+                                destacada -> 2f
+                                else -> 1f
+                            },
+                            onClick = {
+                                onSelectIncident(inc)
+                                true
+                            }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = colorMarcador,
+                                    border = BorderStroke(
+                                        width = if (destacada || seleccionada) {
+                                            3.dp
+                                        } else {
+                                            2.dp
+                                        },
+                                        color = colorBorde
+                                    ),
+                                    shadowElevation = 4.dp,
+                                    modifier = Modifier
+                                        .padding(top = 8.dp, end = 12.dp)
+                                        .size(tamanoMarcador)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = iconoMarcador,
+                                            contentDescription = if (resuelta) {
+                                                "Incidencia resuelta"
+                                            } else {
+                                                categoria.nombre
+                                            },
+                                            tint = Color.White,
+                                            modifier = Modifier.size(
+                                                if (destacada || seleccionada) {
+                                                    28.dp
+                                                } else {
+                                                    24.dp
+                                                }
+                                            )
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF263238),
+                                    contentColor = Color.White,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color.White
+                                    )
+                                ) {
+                                    Text(
+                                        text = inc.contadorReportes.toString(),
+                                        modifier = Modifier.padding(
+                                            horizontal = 6.dp,
+                                            vertical = 2.dp
+                                        ),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
@@ -349,10 +461,12 @@ fun MapScreenContent(
                         FilterChip(
                             selected = selectedCategoryFilter == "Todas",
                             onClick = { onSelectCategory("Todas") },
-                            label = { Text("Todas (${incidenciasList.size})") },
+                            label = { Text("Todas") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryContainer,
-                                selectedLabelColor = OnPrimary
+                                containerColor = Color.White,
+                                labelColor = Color(0xFF263238),
+                                selectedContainerColor = PrimaryDark,
+                                selectedLabelColor = Color.White
                             )
                         )
                     }
@@ -362,8 +476,10 @@ fun MapScreenContent(
                             onClick = { onSelectCategory(cat.nombre) },
                             label = { Text(cat.nombre) },
                             colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color.White,
+                                labelColor = Color(0xFF263238),
                                 selectedContainerColor = Color(cat.colorHex),
-                                selectedLabelColor = OnPrimary
+                                selectedLabelColor = Color.Black
                             )
                         )
                     }
@@ -408,103 +524,248 @@ fun MapScreenContent(
 
                 AnimatedVisibility(visible = selectedIncident != null) {
                     selectedIncident?.let { inc ->
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = SurfaceContainerLowest,
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(
-                                        color = SecondaryFixed,
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text(
-                                            inc.categoria,
-                                            color = OnSecondaryFixed,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                    Text(
-                                        TimeUtils.tiempoTranscurrido(inc.fechaCreacion),
-                                        color = OutlineColor,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (inc.fotoPrincipalUrl.isNotBlank()) {
-                                        AsyncImage(
-                                            model = inc.fotoPrincipalUrl,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                    } else {
-                                        Surface(
-                                            color = SurfaceContainerLow,
-                                            shape = RoundedCornerShape(12.dp),
-                                            modifier = Modifier.size(64.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(Icons.Default.Image, contentDescription = null, tint = OutlineColor)
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(inc.titulo, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                                        Text(
-                                            inc.ubicacion.direccionAproximada.ifBlank { "Ubicación en mapa" },
-                                            color = OnSurfaceVariant,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        Text(
-                                            "${inc.contadorReportes} reportes / confirmaciones",
-                                            color = SecondaryContainer,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = { onSigueAhi(inc.id) },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Sigue ahí")
-                                    }
-                                    Button(
-                                        onClick = { onNavigateToDetail(inc.id) },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text("Ver detalle")
-                                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
+                        key(inc.id) {
+                            TarjetaIncidenciaMapa(
+                                incidencia = inc,
+                                onSigueAhi = { onSigueAhi(inc.id) },
+                                onVerDetalle = { onNavigateToDetail(inc.id) }
+                            )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TarjetaIncidenciaMapa(
+    incidencia: Incidencia,
+    onSigueAhi: () -> Unit,
+    onVerDetalle: () -> Unit
+) {
+    val categoria = Categoria.fromString(incidencia.categoria)
+    val resuelta = incidencia.estado == EstadoIncidencia.RESUELTA
+
+    val descripcion = incidencia.descripcion.ifBlank {
+        incidencia.titulo
+    }
+
+    val personasReportantes = incidencia.reportantesIds
+        .filter { it.isNotBlank() }
+        .distinct()
+        .size
+
+    val textoReportantes = when (personasReportantes) {
+        0 -> "Sin información de personas reportantes"
+        1 -> "1 persona lo reportó"
+        else -> "$personasReportantes personas lo reportaron"
+    }
+
+    val textoConfirmaciones = when (incidencia.contadorConfirmaciones) {
+        1 -> "1 confirmación"
+        else -> "${incidencia.contadorConfirmaciones} confirmaciones"
+    }
+
+    val colorEstado = if (resuelta) {
+        Color(0xFF1565C0)
+    } else {
+        Color(0xFF9A3412)
+    }
+
+    val alturaMaxima = (
+            LocalConfiguration.current.screenHeightDp * 0.5f
+            ).dp
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = alturaMaxima)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = categoria.icono,
+                    contentDescription = null,
+                    tint = Color(categoria.colorHex),
+                    modifier = Modifier.size(24.dp)
+                )
+
+                Text(
+                    text = categoria.nombre,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Text(
+                text = if (resuelta) {
+                    "Resuelta"
+                } else {
+                    "Activa"
+                },
+                color = colorEstado,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (incidencia.fotoPrincipalUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = incidencia.fotoPrincipalUrl,
+                        contentDescription = "Foto de la incidencia",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = categoria.icono,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = incidencia.titulo.ifBlank {
+                            "Incidencia reportada"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = incidencia.ubicacion
+                            .direccionAproximada
+                            .ifBlank { "Ubicación en el mapa" },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (descripcion.isNotBlank()) {
+                Text(
+                    text = descripcion,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            HorizontalDivider()
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = textoReportantes,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = textoConfirmaciones,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = TimeUtils.tiempoTranscurrido(
+                        incidencia.fechaCreacion
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSigueAhi,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text("Sigue ahí")
+                }
+
+                Button(
+                    onClick = onVerDetalle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryDark,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    )
+                ) {
+                    Text("Ver detalle")
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

@@ -74,7 +74,8 @@ class IncidenciasRepository(
             ubicacion = incidencia.ubicacion.copy(
                 geohash = GeoUtils.encodeGeohash(incidencia.ubicacion.latitud, incidencia.ubicacion.longitud)
             ),
-            reportantesIds = listOf(reporteInicial.usuarioId)
+            reportantesIds = listOf(reporteInicial.usuarioId),
+            descripcion = reporteInicial.descripcion
         )
         docRef.set(incidenciaCompleta).await()
         reportesCol.document().set(reporteInicial.copy(incidenciaId = docRef.id)).await()
@@ -119,19 +120,29 @@ class IncidenciasRepository(
 
     suspend fun marcarSigueAhi(incidenciaId: String) {
         val incRef = incidenciasCol.document(incidenciaId)
-        val snap = incRef.get().await()
-        val estado = snap.getString("estado")
 
-        val updates = mutableMapOf<String, Any>(
-            "contadorReportes" to FieldValue.increment(1),
-            "ultimaVerificacionNotificada" to System.currentTimeMillis()
-        )
-        if (estado == EstadoIncidencia.RESUELTA.name) {
-            updates["estado"] = EstadoIncidencia.ACTIVA.name
-            updates["marcasResuelto"] = 0
-            updates["fechaResuelta"] = FieldValue.delete()
-        }
-        incRef.update(updates).await()
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(incRef)
+
+            check(snapshot.exists()) {
+                "La incidencia ya no existe."
+            }
+
+            val estado = snapshot.getString("estado")
+
+            val updates = mutableMapOf<String, Any>(
+                "contadorConfirmaciones" to FieldValue.increment(1),
+                "ultimaVerificacionNotificada" to System.currentTimeMillis()
+            )
+
+            if (estado == EstadoIncidencia.RESUELTA.name) {
+                updates["estado"] = EstadoIncidencia.ACTIVA.name
+                updates["marcasResuelto"] = 0
+                updates["fechaResuelta"] = FieldValue.delete()
+            }
+
+            transaction.update(incRef, updates)
+        }.await()
     }
 
     suspend fun denunciarContenido(
