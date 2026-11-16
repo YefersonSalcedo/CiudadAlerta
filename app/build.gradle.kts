@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.services)
+    // alias(libs.plugins.google.services) // Temporalmente deshabilitado
 }
 
 val localProperties = Properties()
@@ -15,7 +15,7 @@ if (localPropertiesFile.exists()) {
 
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")
     ?: (project.findProperty("MAPS_API_KEY") as? String)
-    ?: error("Falta MAPS_API_KEY en local.properties")
+    ?: "PLACEHOLDER_MAPS_API_KEY"
 
 val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY") ?: ""
 
