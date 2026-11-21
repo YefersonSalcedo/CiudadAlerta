@@ -7,3 +7,5 @@
 /app/build/
 functions/node_modules/
 functions/lib/
+seed/serviceAccount.json
+seed/node_modules/
