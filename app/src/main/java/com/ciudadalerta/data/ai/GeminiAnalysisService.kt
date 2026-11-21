@@ -44,7 +44,6 @@ class GeminiAnalysisService {
             put("responseMimeType", "application/json")
             put("temperature", 0.2)
             put("maxOutputTokens", 1024)
-            put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
         }
 
         val systemInstruction = JSONObject().put(
