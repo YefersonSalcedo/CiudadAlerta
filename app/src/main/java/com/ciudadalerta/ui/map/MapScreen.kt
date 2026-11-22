@@ -19,7 +19,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -37,8 +36,11 @@ import com.ciudadalerta.ui.theme.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
+import com.google.maps.android.compose.clustering.Clustering
+import kotlinx.coroutines.launch
 
 import androidx.compose.ui.tooling.preview.Preview
 import com.ciudadalerta.data.model.Incidencia
@@ -108,12 +110,14 @@ fun MapScreen(
     val selectedCategoryFilter by viewModel.categoriaSeleccionada.collectAsState()
     val selectedIncident by viewModel.incidenciaSeleccionada.collectAsState()
     val incidenciasList by viewModel.incidenciasFiltradas.collectAsState()
+    val allIncidencias by viewModel.incidencias.collectAsState()
 
     MapScreenContent(
         cameraPositionState = cameraPositionState,
         selectedCategoryFilter = selectedCategoryFilter,
         selectedIncident = selectedIncident,
         incidenciasList = incidenciasList,
+        totalIncidenciasCount = allIncidencias.size,
         tienePermiso = tienePermiso,
         onSelectCategory = { viewModel.seleccionarCategoria(it) },
         onSelectIncident = { viewModel.seleccionarIncidencia(it) },
@@ -205,13 +209,14 @@ private fun EtiquetaNav(texto: String) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, MapsComposeExperimentalApi::class)
 @Composable
 fun MapScreenContent(
     cameraPositionState: CameraPositionState = rememberCameraPositionState(),
     selectedCategoryFilter: String,
     selectedIncident: Incidencia?,
     incidenciasList: List<Incidencia>,
+    totalIncidenciasCount: Int = incidenciasList.size,
     tienePermiso: Boolean,
     onSelectCategory: (String) -> Unit,
     onSelectIncident: (Incidencia?) -> Unit,
@@ -224,6 +229,11 @@ fun MapScreenContent(
 ) {
     var tipoMapa by rememberSaveable { mutableStateOf(MapType.SATELLITE) }
     var temaMapa by rememberSaveable { mutableStateOf(ComposeMapColorScheme.LIGHT) }
+    val scope = rememberCoroutineScope()
+
+    val clusterItems = remember(incidenciasList) {
+        incidenciasList.map { IncidenciaClusterItem(it) }
+    }
 
     Scaffold(
         topBar = {
@@ -307,8 +317,59 @@ fun MapScreenContent(
                 uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = true),
                 onMapClick = { onSelectIncident(null) }
             ) {
-                incidenciasList.forEach { inc ->
-                    key(inc.id) {
+                Clustering(
+                    items = clusterItems,
+                    onClusterClick = { cluster ->
+                        scope.launch {
+                            val builder = LatLngBounds.builder()
+                            for (item in cluster.items) {
+                                builder.include(item.position)
+                            }
+                            val bounds = builder.build()
+                            if (bounds.southwest == bounds.northeast) {
+                                cameraPositionState.animate(
+                                    CameraUpdateFactory.newLatLngZoom(bounds.southwest, cameraPositionState.position.zoom + 2f)
+                                )
+                            } else {
+                                cameraPositionState.animate(
+                                    CameraUpdateFactory.newLatLngBounds(bounds, 100)
+                                )
+                            }
+                        }
+                        true
+                    },
+                    onClusterItemClick = { item ->
+                        onSelectIncident(item.incidencia)
+                        true
+                    },
+                    clusterContent = { cluster ->
+                        val categorias = cluster.items.map { it.incidencia.categoria }.distinct()
+                        val colorGrupo = if (categorias.size == 1) {
+                            val cat = Categoria.fromString(categorias.first())
+                            Color(cat.colorHex)
+                        } else {
+                            PrimaryDark
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = colorGrupo,
+                            border = BorderStroke(3.dp, Color.White),
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.size(if (cluster.size > 99) 52.dp else 44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (cluster.size > 99) "99+" else cluster.size.toString(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    },
+                    clusterItemContent = { item ->
+                        val inc = item.incidencia
                         val categoria = Categoria.fromString(inc.categoria)
                         val seleccionada = selectedIncident?.id == inc.id
                         val resuelta = inc.estado == EstadoIncidencia.RESUELTA
@@ -341,115 +402,71 @@ fun MapScreenContent(
                             Color.White
                         }
 
-                        val estadoMarcador = rememberMarkerState(
-                            key = inc.id,
-                            position = LatLng(
-                                inc.ubicacion.latitud,
-                                inc.ubicacion.longitud
-                            )
-                        )
-
-                        LaunchedEffect(
-                            inc.ubicacion.latitud,
-                            inc.ubicacion.longitud
+                        Box(
+                            modifier = Modifier.padding(4.dp)
                         ) {
-                            estadoMarcador.position = LatLng(
-                                inc.ubicacion.latitud,
-                                inc.ubicacion.longitud
-                            )
-                        }
-
-                        MarkerComposable(
-                            inc.id,
-                            inc.categoria,
-                            inc.estado,
-                            inc.contadorReportes,
-                            seleccionada,
-                            destacada,
-                            state = estadoMarcador,
-                            title = inc.titulo,
-                            snippet = if (resuelta) {
-                                "Resuelta · ${inc.contadorReportes} reportes"
-                            } else {
-                                "${categoria.nombre} · ${inc.contadorReportes} reportes"
-                            },
-                            anchor = Offset(0.5f, 0.5f),
-                            zIndex = when {
-                                seleccionada -> 3f
-                                destacada -> 2f
-                                else -> 1f
-                            },
-                            onClick = {
-                                onSelectIncident(inc)
-                                true
-                            }
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(4.dp)
+                            Surface(
+                                shape = CircleShape,
+                                color = colorMarcador,
+                                border = BorderStroke(
+                                    width = if (destacada || seleccionada) {
+                                        3.dp
+                                    } else {
+                                        2.dp
+                                    },
+                                    color = colorBorde
+                                ),
+                                shadowElevation = 4.dp,
+                                modifier = Modifier
+                                    .padding(top = 8.dp, end = 12.dp)
+                                    .size(tamanoMarcador)
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = colorMarcador,
-                                    border = BorderStroke(
-                                        width = if (destacada || seleccionada) {
-                                            3.dp
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = iconoMarcador,
+                                        contentDescription = if (resuelta) {
+                                            "Incidencia resuelta"
                                         } else {
-                                            2.dp
+                                            categoria.nombre
                                         },
-                                        color = colorBorde
-                                    ),
-                                    shadowElevation = 4.dp,
-                                    modifier = Modifier
-                                        .padding(top = 8.dp, end = 12.dp)
-                                        .size(tamanoMarcador)
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = iconoMarcador,
-                                            contentDescription = if (resuelta) {
-                                                "Incidencia resuelta"
+                                        tint = Color.White,
+                                        modifier = Modifier.size(
+                                            if (destacada || seleccionada) {
+                                                28.dp
                                             } else {
-                                                categoria.nombre
-                                            },
-                                            tint = Color.White,
-                                            modifier = Modifier.size(
-                                                if (destacada || seleccionada) {
-                                                    28.dp
-                                                } else {
-                                                    24.dp
-                                                }
-                                            )
+                                                24.dp
+                                            }
                                         )
-                                    }
+                                    )
                                 }
+                            }
 
-                                Surface(
-                                    modifier = Modifier.align(Alignment.TopEnd),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color(0xFF263238),
-                                    contentColor = Color.White,
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = Color.White
-                                    )
-                                ) {
-                                    Text(
-                                        text = inc.contadorReportes.toString(),
-                                        modifier = Modifier.padding(
-                                            horizontal = 6.dp,
-                                            vertical = 2.dp
-                                        ),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
+                            Surface(
+                                modifier = Modifier.align(Alignment.TopEnd),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF263238),
+                                contentColor = Color.White,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = Color.White
+                                )
+                            ) {
+                                Text(
+                                    text = inc.contadorReportes.toString(),
+                                    modifier = Modifier.padding(
+                                        horizontal = 6.dp,
+                                        vertical = 2.dp
+                                    ),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
                             }
                         }
                     }
-                }
+                )
             }
 
             Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -461,7 +478,7 @@ fun MapScreenContent(
                         FilterChip(
                             selected = selectedCategoryFilter == "Todas",
                             onClick = { onSelectCategory("Todas") },
-                            label = { Text("Todas") },
+                            label = { Text("Todas ($totalIncidenciasCount)") },
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = Color.White,
                                 labelColor = Color(0xFF263238),
