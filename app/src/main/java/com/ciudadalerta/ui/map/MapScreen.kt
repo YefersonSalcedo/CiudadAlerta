@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -97,9 +98,12 @@ fun MapScreen(
         }
     }
 
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
+
     LaunchedEffect(tienePermiso) {
         if (tienePermiso) {
             obtenerUbicacionActual(context)?.let { loc ->
+                userLocation = LatLng(loc.latitude, loc.longitude)
                 cameraPositionState.animate(
                     CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f)
                 )
@@ -119,6 +123,7 @@ fun MapScreen(
         incidenciasList = incidenciasList,
         totalIncidenciasCount = allIncidencias.size,
         tienePermiso = tienePermiso,
+        userLocation = userLocation,
         onSelectCategory = { viewModel.seleccionarCategoria(it) },
         onSelectIncident = { viewModel.seleccionarIncidencia(it) },
         onSigueAhi = { viewModel.marcarSigueAhi(it) },
@@ -218,6 +223,7 @@ fun MapScreenContent(
     incidenciasList: List<Incidencia>,
     totalIncidenciasCount: Int = incidenciasList.size,
     tienePermiso: Boolean,
+    userLocation: LatLng? = null,
     onSelectCategory: (String) -> Unit,
     onSelectIncident: (Incidencia?) -> Unit,
     onSigueAhi: (String) -> Unit,
@@ -227,6 +233,7 @@ fun MapScreenContent(
     onNavigateToNotifications: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
+    var isMapView by rememberSaveable { mutableStateOf(true) }
     var tipoMapa by rememberSaveable { mutableStateOf(MapType.SATELLITE) }
     var temaMapa by rememberSaveable { mutableStateOf(ComposeMapColorScheme.LIGHT) }
     val scope = rememberCoroutineScope()
@@ -303,173 +310,189 @@ fun MapScreenContent(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                mapColorScheme = temaMapa,
-                // Deja libre la zona de los chips para que no tapen el botón de mi ubicación
-                contentPadding = PaddingValues(top = 56.dp),
-                properties = MapProperties(
-                    mapType = tipoMapa,
-                    isMyLocationEnabled = tienePermiso,
-                    mapStyleOptions = MapStyleOptions(ESTILO_SIN_POIS)
-                ),
-                uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = true),
-                onMapClick = { onSelectIncident(null) }
-            ) {
-                Clustering(
-                    items = clusterItems,
-                    onClusterClick = { cluster ->
-                        scope.launch {
-                            val builder = LatLngBounds.builder()
-                            for (item in cluster.items) {
-                                builder.include(item.position)
-                            }
-                            val bounds = builder.build()
-                            if (bounds.southwest == bounds.northeast) {
-                                cameraPositionState.animate(
-                                    CameraUpdateFactory.newLatLngZoom(bounds.southwest, cameraPositionState.position.zoom + 2f)
-                                )
-                            } else {
-                                cameraPositionState.animate(
-                                    CameraUpdateFactory.newLatLngBounds(bounds, 100)
-                                )
-                            }
-                        }
-                        true
-                    },
-                    onClusterItemClick = { item ->
-                        onSelectIncident(item.incidencia)
-                        true
-                    },
-                    clusterContent = { cluster ->
-                        val categorias = cluster.items.map { it.incidencia.categoria }.distinct()
-                        val colorGrupo = if (categorias.size == 1) {
-                            val cat = Categoria.fromString(categorias.first())
-                            Color(cat.colorHex)
-                        } else {
-                            PrimaryDark
-                        }
-
-                        Surface(
-                            shape = CircleShape,
-                            color = colorGrupo,
-                            border = BorderStroke(3.dp, Color.White),
-                            shadowElevation = 6.dp,
-                            modifier = Modifier.size(if (cluster.size > 99) 52.dp else 44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = if (cluster.size > 99) "99+" else cluster.size.toString(),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
-                    },
-                    clusterItemContent = { item ->
-                        val inc = item.incidencia
-                        val categoria = Categoria.fromString(inc.categoria)
-                        val seleccionada = selectedIncident?.id == inc.id
-                        val resuelta = inc.estado == EstadoIncidencia.RESUELTA
-
-                        val destacada =
-                            inc.estado == EstadoIncidencia.ACTIVA &&
-                                    inc.contadorReportes >= MapViewModel.MIN_REPORTES_DESTACADA
-
-                        val colorMarcador = if (resuelta) {
-                            Color(0xFF1565C0)
-                        } else {
-                            Color(categoria.colorHex)
-                        }
-
-                        val iconoMarcador = if (resuelta) {
-                            Icons.Default.CheckCircle
-                        } else {
-                            categoria.icono
-                        }
-
-                        val tamanoMarcador = when {
-                            seleccionada -> 56.dp
-                            destacada -> 50.dp
-                            else -> 40.dp
-                        }
-
-                        val colorBorde = if (destacada) {
-                            Color(0xFFFFD600)
-                        } else {
-                            Color.White
-                        }
-
-                        Box(
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = colorMarcador,
-                                border = BorderStroke(
-                                    width = if (destacada || seleccionada) {
-                                        3.dp
-                                    } else {
-                                        2.dp
-                                    },
-                                    color = colorBorde
-                                ),
-                                shadowElevation = 4.dp,
-                                modifier = Modifier
-                                    .padding(top = 8.dp, end = 12.dp)
-                                    .size(tamanoMarcador)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = iconoMarcador,
-                                        contentDescription = if (resuelta) {
-                                            "Incidencia resuelta"
-                                        } else {
-                                            categoria.nombre
-                                        },
-                                        tint = Color.White,
-                                        modifier = Modifier.size(
-                                            if (destacada || seleccionada) {
-                                                28.dp
-                                            } else {
-                                                24.dp
-                                            }
-                                        )
+            if (isMapView) {
+                GoogleMap(
+                    modifier = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    mapColorScheme = temaMapa,
+                    // Deja libre la cabecera (interruptor + chips) para que no tape el botón de mi ubicación
+                    contentPadding = PaddingValues(top = 56.dp),
+                    properties = MapProperties(
+                        mapType = tipoMapa,
+                        isMyLocationEnabled = tienePermiso,
+                        mapStyleOptions = MapStyleOptions(ESTILO_SIN_POIS)
+                    ),
+                    uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = true),
+                    onMapClick = { onSelectIncident(null) }
+                ) {
+                    Clustering(
+                        items = clusterItems,
+                        onClusterClick = { cluster ->
+                            scope.launch {
+                                val builder = LatLngBounds.builder()
+                                for (item in cluster.items) {
+                                    builder.include(item.position)
+                                }
+                                val bounds = builder.build()
+                                if (bounds.southwest == bounds.northeast) {
+                                    cameraPositionState.animate(
+                                        CameraUpdateFactory.newLatLngZoom(bounds.southwest, cameraPositionState.position.zoom + 2f)
+                                    )
+                                } else {
+                                    cameraPositionState.animate(
+                                        CameraUpdateFactory.newLatLngBounds(bounds, 100)
                                     )
                                 }
                             }
+                            true
+                        },
+                        onClusterItemClick = { item ->
+                            onSelectIncident(item.incidencia)
+                            true
+                        },
+                        clusterContent = { cluster ->
+                            val categorias = cluster.items.map { it.incidencia.categoria }.distinct()
+                            val colorGrupo = if (categorias.size == 1) {
+                                val cat = Categoria.fromString(categorias.first())
+                                Color(cat.colorHex)
+                            } else {
+                                PrimaryDark
+                            }
 
                             Surface(
-                                modifier = Modifier.align(Alignment.TopEnd),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFF263238),
-                                contentColor = Color.White,
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = Color.White
-                                )
+                                shape = CircleShape,
+                                color = colorGrupo,
+                                border = BorderStroke(3.dp, Color.White),
+                                shadowElevation = 6.dp,
+                                modifier = Modifier.size(if (cluster.size > 99) 52.dp else 44.dp)
                             ) {
-                                Text(
-                                    text = inc.contadorReportes.toString(),
-                                    modifier = Modifier.padding(
-                                        horizontal = 6.dp,
-                                        vertical = 2.dp
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = if (cluster.size > 99) "99+" else cluster.size.toString(),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        },
+                        clusterItemContent = { item ->
+                            val inc = item.incidencia
+                            val categoria = Categoria.fromString(inc.categoria)
+                            val seleccionada = selectedIncident?.id == inc.id
+                            val resuelta = inc.estado == EstadoIncidencia.RESUELTA
+
+                            val destacada =
+                                inc.estado == EstadoIncidencia.ACTIVA &&
+                                        inc.contadorReportes >= MapViewModel.MIN_REPORTES_DESTACADA
+
+                            val colorMarcador = if (resuelta) {
+                                Color(0xFF1565C0)
+                            } else {
+                                Color(categoria.colorHex)
+                            }
+
+                            val iconoMarcador = if (resuelta) {
+                                Icons.Default.CheckCircle
+                            } else {
+                                categoria.icono
+                            }
+
+                            val tamanoMarcador = when {
+                                seleccionada -> 56.dp
+                                destacada -> 50.dp
+                                else -> 40.dp
+                            }
+
+                            val colorBorde = if (destacada) {
+                                Color(0xFFFFD600)
+                            } else {
+                                Color.White
+                            }
+
+                            Box(
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = colorMarcador,
+                                    border = BorderStroke(
+                                        width = if (destacada || seleccionada) {
+                                            3.dp
+                                        } else {
+                                            2.dp
+                                        },
+                                        color = colorBorde
                                     ),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
+                                    shadowElevation = 4.dp,
+                                    modifier = Modifier
+                                        .padding(top = 8.dp, end = 12.dp)
+                                        .size(tamanoMarcador)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = iconoMarcador,
+                                            contentDescription = if (resuelta) {
+                                                "Incidencia resuelta"
+                                            } else {
+                                                categoria.nombre
+                                            },
+                                            tint = Color.White,
+                                            modifier = Modifier.size(
+                                                if (destacada || seleccionada) {
+                                                    28.dp
+                                                } else {
+                                                    24.dp
+                                                }
+                                            )
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF263238),
+                                    contentColor = Color.White,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color.White
+                                    )
+                                ) {
+                                    Text(
+                                        text = inc.contadorReportes.toString(),
+                                        modifier = Modifier.padding(
+                                            horizontal = 6.dp,
+                                            vertical = 2.dp
+                                        ),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
-                    }
+                    )
+                }
+            } else {
+                NearbyListView(
+                    incidenciasList = incidenciasList,
+                    userLocation = userLocation,
+                    onNavigateToDetail = onNavigateToDetail,
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(top = 56.dp, bottom = 88.dp)
                 )
             }
 
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            // Cabecera: filtros de categoría (el interruptor Mapa/Lista va abajo, junto al botón Reportar)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            ) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -503,17 +526,20 @@ fun MapScreenContent(
                 }
             }
 
-            SelectorCapasMapa(
-                tipoMapa = tipoMapa,
-                temaMapa = temaMapa,
-                onTipoMapa = { tipoMapa = it },
-                onTemaMapa = { temaMapa = it },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 116.dp, end = 12.dp)
-            )
+            // El selector de capas solo aplica al mapa
+            if (isMapView) {
+                SelectorCapasMapa(
+                    tipoMapa = tipoMapa,
+                    temaMapa = temaMapa,
+                    onTipoMapa = { tipoMapa = it },
+                    onTemaMapa = { temaMapa = it },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 116.dp, end = 12.dp)
+                )
+            }
 
-            // Botón "Reportar" + tarjeta en una Column: el botón queda arriba de la tarjeta
+            // Interruptor Mapa/Lista + botón "Reportar" + tarjeta en una Column: la fila queda arriba de la tarjeta
             // y nunca se pisan, sin importar la altura de la tarjeta.
             Column(
                 modifier = Modifier
@@ -523,23 +549,58 @@ fun MapScreenContent(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FloatingActionButton(
-                    onClick = onNavigateToNewReport,
-                    containerColor = SecondaryContainer,
-                    contentColor = OnPrimary,
-                    shape = RoundedCornerShape(18.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.width(170.dp)) {
+                        SegmentedButton(
+                            selected = isMapView,
+                            onClick = { isMapView = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            icon = {},
+                            label = { Text("Mapa", maxLines = 1) },
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = PrimaryDark,
+                                activeContentColor = Color.White,
+                                inactiveContainerColor = Color.White,
+                                inactiveContentColor = Color(0xFF263238)
+                            )
+                        )
+                        SegmentedButton(
+                            selected = !isMapView,
+                            onClick = { isMapView = false },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            icon = {},
+                            label = { Text("Lista", maxLines = 1) },
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = PrimaryDark,
+                                activeContentColor = Color.White,
+                                inactiveContainerColor = Color.White,
+                                inactiveContentColor = Color(0xFF263238)
+                            )
+                        )
+                    }
+
+                    FloatingActionButton(
+                        onClick = onNavigateToNewReport,
+                        containerColor = SecondaryContainer,
+                        contentColor = OnPrimary,
+                        shape = RoundedCornerShape(18.dp)
                     ) {
-                        Icon(Icons.Default.AddLocationAlt, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reportar", fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AddLocationAlt, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Reportar", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
-                AnimatedVisibility(visible = selectedIncident != null) {
+                AnimatedVisibility(visible = isMapView && selectedIncident != null) {
                     selectedIncident?.let { inc ->
                         key(inc.id) {
                             TarjetaIncidenciaMapa(
