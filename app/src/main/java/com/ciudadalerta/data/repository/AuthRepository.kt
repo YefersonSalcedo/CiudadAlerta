@@ -50,16 +50,7 @@ class AuthRepository(
             ?: throw IllegalStateException("No hay sesión iniciada")
         val docRef = firestore.collection("usuarios").document(user.uid)
 
-        try {
-            val snap = docRef.get().await()
-            if (snap.exists()) {
-                snap.toObject(Usuario::class.java)?.let { return it }
-            }
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Error leyendo usuario: ${e.message}", e)
-        }
-
-        val nuevo = Usuario(
+        var usuario = Usuario(
             id = user.uid,
             nombre = user.displayName ?: "Ciudadano",
             correo = user.email ?: "",
@@ -69,11 +60,28 @@ class AuthRepository(
         )
 
         try {
-            docRef.set(nuevo).await()
+            val snap = docRef.get().await()
+            if (snap.exists()) {
+                snap.toObject(Usuario::class.java)?.let { usuario = it }
+            } else {
+                docRef.set(usuario).await()
+            }
         } catch (e: Exception) {
-            Log.e("AuthRepository", "Error creando usuario en Firestore: ${e.message}", e)
+            Log.e("AuthRepository", "Error leyendo/creando usuario: ${e.message}", e)
         }
-        return nuevo
+
+        actualizarFcmToken(user.uid)
+        return usuario
+    }
+
+    private suspend fun actualizarFcmToken(uid: String) {
+        try {
+            val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+            firestore.collection("usuarios").document(uid)
+                .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge()).await()
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Error actualizando fcmToken: ${e.message}", e)
+        }
     }
 
     fun cerrarSesion() {

@@ -1,6 +1,7 @@
 package com.ciudadalerta.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -39,10 +40,22 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun CiudadAlertaNavGraph(navController: NavHostController) {
+fun CiudadAlertaNavGraph(
+    navController: NavHostController,
+    incidenciaIdInicial: String? = null,
+    onIncidenciaConsumida: () -> Unit = {}
+) {
+    val user = FirebaseAuth.getInstance().currentUser
+    val estaAutenticado = user != null && !user.isAnonymous
     val startDestination = remember {
-        val user = FirebaseAuth.getInstance().currentUser
-        if (user != null && !user.isAnonymous) Screen.Map.route else Screen.Login.route
+        if (estaAutenticado) Screen.Map.route else Screen.Login.route
+    }
+
+    LaunchedEffect(incidenciaIdInicial, estaAutenticado) {
+        if (!incidenciaIdInicial.isNullOrBlank() && estaAutenticado) {
+            navController.navigate(Screen.IncidentDetail.createRoute(incidenciaIdInicial))
+            onIncidenciaConsumida()
+        }
     }
 
     NavHost(navController = navController, startDestination = startDestination) {
@@ -123,7 +136,8 @@ fun CiudadAlertaNavGraph(navController: NavHostController) {
             NotificationsScreen(
                 onNavigateToMap = { navController.navigateTab(Screen.Map.route) },
                 onNavigateToMyReports = { navController.navigateTab(Screen.MyReports.route) },
-                onNavigateToProfile = { navController.navigateTab(Screen.Profile.route) }
+                onNavigateToProfile = { navController.navigateTab(Screen.Profile.route) },
+                onNavigateToDetail = { id -> navController.navigate(Screen.IncidentDetail.createRoute(id)) }
             )
         }
         composable(Screen.Profile.route) {

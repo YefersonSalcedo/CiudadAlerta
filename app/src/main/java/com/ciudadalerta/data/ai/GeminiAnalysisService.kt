@@ -40,23 +40,37 @@ class GeminiAnalysisService {
         bitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
         val imagenB64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 
-        val body = JSONObject()
-            .put("systemInstruction", JSONObject().put("parts",
-                JSONArray().put(JSONObject().put("text", promptSistema))))
-            .put("contents", JSONArray().put(JSONObject()
-                .put("role", "user")
-                .put("parts", JSONArray()
-                    .put(JSONObject().put("inlineData", JSONObject()
-                        .put("mimeType", "image/jpeg")
-                        .put("data", imagenB64)))
-                    .put(JSONObject().put("text",
-                        "Devuelve únicamente el JSON con el análisis de la fotografía.")))))
-            .put("generationConfig", JSONObject()
-                .put("responseMimeType", "application/json")
-                .put("temperature", 0.2))
+        val generationConfig = JSONObject().apply {
+            put("responseMimeType", "application/json")
+            put("temperature", 0.2)
+            put("maxOutputTokens", 1024)
+        }
 
-        val conn = (URL("$BASE_URL/$MODELO:generateContent").openConnection()
-                as HttpURLConnection).apply {
+        val systemInstruction = JSONObject().put(
+            "parts",
+            JSONArray().put(JSONObject().put("text", promptSistema))
+        )
+
+        val userParts = JSONArray().apply {
+            put(JSONObject().put("inlineData", JSONObject().apply {
+                put("mimeType", "image/jpeg")
+                put("data", imagenB64)
+            }))
+            put(JSONObject().put("text", "Devuelve únicamente el JSON con el análisis de la fotografía."))
+        }
+
+        val userContent = JSONObject().apply {
+            put("role", "user")
+            put("parts", userParts)
+        }
+
+        val body = JSONObject().apply {
+            put("systemInstruction", systemInstruction)
+            put("contents", JSONArray().put(userContent))
+            put("generationConfig", generationConfig)
+        }
+
+        val conn = (URL("$BASE_URL/$MODELO:generateContent").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
             readTimeout = 60_000
@@ -92,13 +106,23 @@ class GeminiAnalysisService {
     }
 
     private fun parsear(rawText: String): GeminiAnalisisResponse {
-        val json = JSONObject(rawText.replace("```json", "").replace("```", "").trim())
+        val cleaned = rawText.replace("```json", "").replace("```", "").trim()
+        val json = try {
+            JSONObject(cleaned)
+        } catch (e: Exception) {
+            Log.w("GeminiAnalysis", "JSON truncado o malformado recibido: $cleaned", e)
+            intentaRecuperarJsonTruncado(cleaned)
+        }
 
         val catDevuelta = json.optString("categoria", "Otros")
         val estado = json.optString("estado", "valida")
-        val motivo = if (json.isNull("motivoBloqueo")) null else json.optString("motivoBloqueo")
-        val descripcion = json.optString("descripcion", "Incidencia urbana detectada")
+        val motivo = if (json.isNull("motivoBloqueo") || json.optString("motivoBloqueo").isBlank()) null else json.optString("motivoBloqueo")
+        var descripcion = json.optString("descripcion", "Incidencia urbana detectada").trim()
         val esEmergencia = json.optBoolean("esEmergencia", false)
+
+        if (descripcion.isBlank()) {
+            descripcion = "Incidencia urbana detectada en la fotografía."
+        }
 
         val categoria = if (Categoria.CATEGORIAS_BLOQUEADAS.contains(catDevuelta.uppercase())) {
             Categoria.Otros.nombre
@@ -114,6 +138,27 @@ class GeminiAnalysisService {
             descripcion = descripcion,
             esEmergencia = esEmergencia
         )
+    }
+
+    private fun intentaRecuperarJsonTruncado(cleaned: String): JSONObject {
+        var reparado = cleaned
+        if (!reparado.startsWith("{")) {
+            val idx = reparado.indexOf("{")
+            if (idx >= 0) reparado = reparado.substring(idx)
+        }
+        if (!reparado.endsWith("}")) {
+            reparado = if (reparado.contains("\"")) "$reparado\"}" else "$reparado}"
+        }
+        return try {
+            JSONObject(reparado)
+        } catch (_: Exception) {
+            JSONObject().apply {
+                put("categoria", "Otros")
+                put("estado", "valida")
+                put("descripcion", "Incidencia urbana detectada en la fotografía.")
+                put("esEmergencia", false)
+            }
+        }
     }
 
     private fun Bitmap.reducir(maxLado: Int = 1024): Bitmap {
@@ -144,6 +189,9 @@ class GeminiAnalysisService {
         - "Animales abandonados"
         - "Otros"
         
+        LONGITUD DE DESCRIPCIÓN:
+        - La descripción debe ser concisa, de MÁXIMO 2 FRASES (máximo 150 caracteres).
+        
         ESQUEMA JSON OBLIGATORIO:
         {
           "categoria": string,
@@ -158,6 +206,4 @@ class GeminiAnalysisService {
         const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
         const val MODELO = "gemini-3.5-flash-lite"
     }
-
-
 }

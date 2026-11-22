@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Auxiliar: verifica si la petición proviene de un usuario autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Auxiliar: verifica si el usuario autenticado es el propietario del recurso
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Colección: incidencias
+    match /incidencias/{incidenciaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.auth.uid in request.resource.data.reportantesIds;
+
+      // Permite actualizaciones únicamente sobre los campos modificados por las funciones del cliente
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'contadorReportes',
+          'reportantesIds',
+          'marcasResuelto',
+          'estado',
+          'fechaResuelta',
+          'contadorConfirmaciones',
+          'ultimaVerificacionNotificada',
+          'denunciasCount',
+          'ocultoDelMapa',
+          'seguidoresIds'
+        ]);
+
+      allow delete: if false;
+    }
+
+    // Colección: reportes
+    match /reportes/{reporteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Colección: comentarios
+    match /comentarios/{comentarioId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
+      // Marcar "útil": solo puede cambiar utilCount
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['utilCount']);
+      // Borrar: solo el autor (quítalo si no se usa)
+      allow delete: if isAuthenticated() && resource.data.usuarioId == request.auth.uid;
+    }
+
+    // Colección: marcasResuelto (ID formato: {usuarioId}_{contenidoId})
+    match /marcasResuelto/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && docId == request.auth.uid + "_" + request.resource.data.contenidoId;
+      allow update, delete: if false;
+    }
+
+    // Colección: denuncias (ID formato: {usuarioId}_{contenidoId})
+    match /denuncias/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && docId == request.auth.uid + "_" + request.resource.data.contenidoId;
+      allow update, delete: if false;
+    }
+
+    // Colección: usuarios y subcolección de notificaciones
+    match /usuarios/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /notificaciones/{notificacionId} {
+        allow read: if isOwner(uid);
+        // El cliente solo puede modificar el campo "leida"; nadie del cliente crea ni elimina
+        allow update: if isOwner(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+        allow create, delete: if false;
+      }
+    }
+  }
+}

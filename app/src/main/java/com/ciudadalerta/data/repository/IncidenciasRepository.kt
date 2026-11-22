@@ -67,6 +67,19 @@ class IncidenciasRepository(
     }
 
     suspend fun crearNuevaIncidencia(incidencia: Incidencia, reporteInicial: Reporte): String {
+        val hace24h = System.currentTimeMillis() - 24 * 3600 * 1000L
+        val reportesRecientes = reportesCol
+            .whereEqualTo("usuarioId", reporteInicial.usuarioId)
+            .whereGreaterThanOrEqualTo("fecha", hace24h)
+            .get()
+            .await()
+
+        if (reportesRecientes.size() >= CiudadAlertaConfig.MAX_REPORTES_POR_USUARIO_DIA) {
+            throw IllegalStateException(
+                "Has alcanzado el límite máximo de ${CiudadAlertaConfig.MAX_REPORTES_POR_USUARIO_DIA} reportes en 24 horas."
+            )
+        }
+
         val docRef = incidenciasCol.document()
         val incidenciaCompleta = incidencia.copy(
             id = docRef.id,
