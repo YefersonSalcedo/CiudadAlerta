@@ -5,12 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.ciudadalerta.data.model.Comentario
 import com.ciudadalerta.data.model.Denuncia
 import com.ciudadalerta.data.model.Incidencia
+import com.ciudadalerta.data.model.Reporte
+import com.ciudadalerta.data.repository.ComentariosRepository
 import com.ciudadalerta.data.repository.IncidenciasRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class IncidentDetailViewModel(
-    private val incidenciasRepository: IncidenciasRepository = IncidenciasRepository()
+    private val incidenciasRepository: IncidenciasRepository = IncidenciasRepository(),
+    private val comentariosRepository: ComentariosRepository = ComentariosRepository()
 ) : ViewModel() {
 
     private val _incidencia = MutableStateFlow<Incidencia?>(null)
@@ -18,6 +21,9 @@ class IncidentDetailViewModel(
 
     private val _comentarios = MutableStateFlow<List<Comentario>>(emptyList())
     val comentarios: StateFlow<List<Comentario>> = _comentarios.asStateFlow()
+
+    private val _reportes = MutableStateFlow<List<Reporte>>(emptyList())
+    val reportes: StateFlow<List<Reporte>> = _reportes.asStateFlow()
 
     private val _cargando = MutableStateFlow(false)
     val cargando: StateFlow<Boolean> = _cargando.asStateFlow()
@@ -39,9 +45,15 @@ class IncidentDetailViewModel(
             }
         }
 
-        incidenciasRepository.observarComentarios(incidenciaId)
+        comentariosRepository.observarComentarios(incidenciaId)
             .onEach { lista ->
                 _comentarios.value = lista
+            }
+            .launchIn(viewModelScope)
+
+        incidenciasRepository.observarReportes(incidenciaId)
+            .onEach { lista ->
+                _reportes.value = lista
             }
             .launchIn(viewModelScope)
     }
@@ -63,7 +75,7 @@ class IncidentDetailViewModel(
                     usuarioFotoUrl = usuarioFotoUrl,
                     texto = texto.trim()
                 )
-                incidenciasRepository.publicarComentario(nuevoComentario)
+                comentariosRepository.publicarComentario(nuevoComentario)
             } catch (e: Exception) {
                 _mensajeError.value = e.message ?: "Error al agregar el comentario"
             }

@@ -21,6 +21,7 @@ private val LightColorScheme = lightColorScheme(
     tertiary = TertiaryGreen,
     onTertiary = OnTertiary,
     tertiaryContainer = TertiaryContainer,
+    onTertiaryContainer = OnTertiaryContainer,
     background = BackgroundLight,
     surface = SurfaceLight,
     onBackground = OnSurface,
