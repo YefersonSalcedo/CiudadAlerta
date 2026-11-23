@@ -246,6 +246,14 @@ fun MapScreenContent(
     var tipoMapa by rememberSaveable { mutableStateOf(MapType.SATELLITE) }
     var temaMapa by rememberSaveable { mutableStateOf(ComposeMapColorScheme.LIGHT) }
     var busquedaTexto by rememberSaveable { mutableStateOf("") }
+    var tarjetaMinimizada by rememberSaveable { mutableStateOf(false) }
+    var modoLimpio by rememberSaveable { mutableStateOf(false) }
+
+    // Al elegir otra incidencia, la tarjeta vuelve a mostrarse completa y se sale del modo limpio
+    LaunchedEffect(selectedIncident?.id) {
+        tarjetaMinimizada = false
+        if (selectedIncident != null) modoLimpio = false
+    }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -331,7 +339,7 @@ fun MapScreenContent(
                     cameraPositionState = cameraPositionState,
                     mapColorScheme = temaMapa,
                     // Deja libre la cabecera (búsqueda + chips + capas) para que el botón nativo de ubicación quede abajo
-                    contentPadding = PaddingValues(top = 170.dp),
+                    contentPadding = PaddingValues(top = if (modoLimpio) 0.dp else 170.dp),
                     properties = MapProperties(
                         mapType = tipoMapa,
                         isMyLocationEnabled = tienePermiso,
@@ -502,137 +510,139 @@ fun MapScreenContent(
                 )
             }
 
-            // Cabecera: Búsqueda de ubicación + Filtros de categoría
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color.White,
-                    shadowElevation = 4.dp,
+            if (!modoLimpio) {
+                // Cabecera: Búsqueda de ubicación + Filtros de categoría
+                Column(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp)
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .padding(top = 10.dp)
                 ) {
-                    Row(
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        shadowElevation = 4.dp,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth()
+                            .height(48.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Buscar",
-                            tint = PrimaryDark,
-                            modifier = Modifier.size(20.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (busquedaTexto.isEmpty()) {
-                                Text(
-                                    text = "Buscar dirección o ciudad...",
-                                    fontSize = 14.sp,
-                                    color = OnSurfaceVariant
-                                )
-                            }
-                            BasicTextField(
-                                value = busquedaTexto,
-                                onValueChange = { busquedaTexto = it },
-                                singleLine = true,
-                                textStyle = LocalTextStyle.current.copy(
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF263238),
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(
-                                    onSearch = {
-                                        val query = busquedaTexto.trim()
-                                        if (query.isNotBlank()) {
-                                            focusManager.clearFocus()
-                                            scope.launch {
-                                                val resultado = buscarUbicacionConGeocoder(context, query)
-                                                resultado.onSuccess { latLng ->
-                                                    cameraPositionState.animate(
-                                                        CameraUpdateFactory.newLatLngZoom(latLng, 15f)
-                                                    )
-                                                }.onFailure { err ->
-                                                    val mensaje = if (err is NoSuchElementException) {
-                                                        "No se encontraron resultados para \"$query\""
-                                                    } else {
-                                                        "Error al buscar la ubicación. Revisa tu conexión."
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Buscar",
+                                tint = PrimaryDark,
+                                modifier = Modifier.size(20.dp)
+                            )
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (busquedaTexto.isEmpty()) {
+                                    Text(
+                                        text = "Buscar dirección o ciudad...",
+                                        fontSize = 14.sp,
+                                        color = OnSurfaceVariant
+                                    )
+                                }
+                                BasicTextField(
+                                    value = busquedaTexto,
+                                    onValueChange = { busquedaTexto = it },
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF263238),
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(
+                                        onSearch = {
+                                            val query = busquedaTexto.trim()
+                                            if (query.isNotBlank()) {
+                                                focusManager.clearFocus()
+                                                scope.launch {
+                                                    val resultado = buscarUbicacionConGeocoder(context, query)
+                                                    resultado.onSuccess { latLng ->
+                                                        cameraPositionState.animate(
+                                                            CameraUpdateFactory.newLatLngZoom(latLng, 15f)
+                                                        )
+                                                    }.onFailure { err ->
+                                                        val mensaje = if (err is NoSuchElementException) {
+                                                            "No se encontraron resultados para \"$query\""
+                                                        } else {
+                                                            "Error al buscar la ubicación. Revisa tu conexión."
+                                                        }
+                                                        snackbarHostState.showSnackbar(mensaje)
                                                     }
-                                                    snackbarHostState.showSnackbar(mensaje)
                                                 }
                                             }
                                         }
-                                    }
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        if (busquedaTexto.isNotEmpty()) {
-                            IconButton(
-                                onClick = { busquedaTexto = "" },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Limpiar",
-                                    tint = OnSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
                                 )
+                            }
+
+                            if (busquedaTexto.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { busquedaTexto = "" },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Limpiar",
+                                        tint = OnSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = selectedCategoryFilter == "Todas",
-                            onClick = { onSelectCategory("Todas") },
-                            label = { Text("Todas ($totalIncidenciasCount)") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.White,
-                                labelColor = Color(0xFF263238),
-                                selectedContainerColor = PrimaryDark,
-                                selectedLabelColor = Color.White
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedCategoryFilter == "Todas",
+                                onClick = { onSelectCategory("Todas") },
+                                label = { Text("Todas ($totalIncidenciasCount)") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = Color.White,
+                                    labelColor = Color(0xFF263238),
+                                    selectedContainerColor = PrimaryDark,
+                                    selectedLabelColor = Color.White
+                                )
                             )
-                        )
-                    }
-                    items(Categoria.CATALOGO) { cat ->
-                        FilterChip(
-                            selected = selectedCategoryFilter == cat.nombre,
-                            onClick = { onSelectCategory(cat.nombre) },
-                            label = { Text(cat.nombre) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.White,
-                                labelColor = Color(0xFF263238),
-                                selectedContainerColor = Color(cat.colorHex),
-                                selectedLabelColor = Color.Black
+                        }
+                        items(Categoria.CATALOGO) { cat ->
+                            FilterChip(
+                                selected = selectedCategoryFilter == cat.nombre,
+                                onClick = { onSelectCategory(cat.nombre) },
+                                label = { Text(cat.nombre) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = Color.White,
+                                    labelColor = Color(0xFF263238),
+                                    selectedContainerColor = Color(cat.colorHex),
+                                    selectedLabelColor = Color.Black
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
 
             // El selector de capas solo aplica al mapa
-            if (isMapView) {
+            if (isMapView && !modoLimpio) {
                 SelectorCapasMapa(
                     tipoMapa = tipoMapa,
                     temaMapa = temaMapa,
@@ -644,77 +654,96 @@ fun MapScreenContent(
                 )
             }
 
-            // Interruptor Mapa/Lista + botón "Reportar" + tarjeta en una Column: la fila queda arriba de la tarjeta
-            // y nunca se pisan, sin importar la altura de la tarjeta.
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            if (!modoLimpio) {
+                // Interruptor Mapa/Lista + botón "Reportar" + tarjeta en una Column: la fila queda arriba de la tarjeta
+                // y nunca se pisan, sin importar la altura de la tarjeta.
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.width(170.dp)) {
-                        SegmentedButton(
-                            selected = isMapView,
-                            onClick = { isMapView = true },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            icon = {},
-                            label = { Text("Mapa", maxLines = 1) },
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = PrimaryDark,
-                                activeContentColor = Color.White,
-                                inactiveContainerColor = Color.White,
-                                inactiveContentColor = Color(0xFF263238)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(170.dp)) {
+                            SegmentedButton(
+                                selected = isMapView,
+                                onClick = { isMapView = true },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                icon = {},
+                                label = { Text("Mapa", maxLines = 1) },
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = PrimaryDark,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.White,
+                                    inactiveContentColor = Color(0xFF263238)
+                                )
                             )
-                        )
-                        SegmentedButton(
-                            selected = !isMapView,
-                            onClick = { isMapView = false },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            icon = {},
-                            label = { Text("Lista", maxLines = 1) },
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = PrimaryDark,
-                                activeContentColor = Color.White,
-                                inactiveContainerColor = Color.White,
-                                inactiveContentColor = Color(0xFF263238)
+                            SegmentedButton(
+                                selected = !isMapView,
+                                onClick = { isMapView = false },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                icon = {},
+                                label = { Text("Lista", maxLines = 1) },
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = PrimaryDark,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.White,
+                                    inactiveContentColor = Color(0xFF263238)
+                                )
                             )
-                        )
+                        }
+
+                        FloatingActionButton(
+                            onClick = onNavigateToNewReport,
+                            containerColor = SecondaryContainer,
+                            contentColor = OnPrimary,
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.AddLocationAlt, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Reportar", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
 
-                    FloatingActionButton(
-                        onClick = onNavigateToNewReport,
-                        containerColor = SecondaryContainer,
-                        contentColor = OnPrimary,
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.AddLocationAlt, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Reportar", fontWeight = FontWeight.Bold)
+                    AnimatedVisibility(visible = isMapView && selectedIncident != null) {
+                        selectedIncident?.let { inc ->
+                            key(inc.id) {
+                                TarjetaIncidenciaMapa(
+                                    incidencia = inc,
+                                    minimizada = tarjetaMinimizada,
+                                    onToggleMinimizar = { tarjetaMinimizada = !tarjetaMinimizada },
+                                    onModoLimpio = { modoLimpio = true },
+                                    onSigueAhi = { onSigueAhi(inc.id) },
+                                    onVerDetalle = { onNavigateToDetail(inc.id) }
+                                )
+                            }
                         }
                     }
                 }
+            }
 
-                AnimatedVisibility(visible = isMapView && selectedIncident != null) {
-                    selectedIncident?.let { inc ->
-                        key(inc.id) {
-                            TarjetaIncidenciaMapa(
-                                incidencia = inc,
-                                onSigueAhi = { onSigueAhi(inc.id) },
-                                onVerDetalle = { onNavigateToDetail(inc.id) }
-                            )
-                        }
-                    }
+            // En modo limpio solo queda el mapa y este botón para volver a mostrar los controles
+            if (modoLimpio) {
+                SmallFloatingActionButton(
+                    onClick = { modoLimpio = false },
+                    containerColor = Color.White,
+                    contentColor = PrimaryDark,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = "Mostrar controles")
                 }
             }
         }
@@ -724,6 +753,9 @@ fun MapScreenContent(
 @Composable
 private fun TarjetaIncidenciaMapa(
     incidencia: Incidencia,
+    minimizada: Boolean,
+    onToggleMinimizar: () -> Unit,
+    onModoLimpio: () -> Unit,
     onSigueAhi: () -> Unit,
     onVerDetalle: () -> Unit
 ) {
@@ -788,167 +820,200 @@ private fun TarjetaIncidenciaMapa(
                 )
 
                 Text(
-                    text = categoria.nombre,
+                    // Minimizada: se muestra el título para saber qué incidencia es
+                    text = if (minimizada) {
+                        incidencia.titulo.ifBlank { categoria.nombre }
+                    } else {
+                        categoria.nombre
+                    },
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                IconButton(
+                    onClick = onToggleMinimizar,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (minimizada) {
+                            Icons.Default.KeyboardArrowUp
+                        } else {
+                            Icons.Default.KeyboardArrowDown
+                        },
+                        contentDescription = if (minimizada) "Expandir tarjeta" else "Minimizar tarjeta"
+                    )
+                }
+
+                IconButton(
+                    onClick = onModoLimpio,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VisibilityOff,
+                        contentDescription = "Ocultar controles para ver solo el mapa"
+                    )
+                }
             }
 
-            Text(
-                text = if (resuelta) {
-                    "Resuelta"
-                } else {
-                    "Activa"
-                },
-                color = colorEstado,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
+            if (!minimizada) {
+                Text(
+                    text = if (resuelta) {
+                        "Resuelta"
+                    } else {
+                        "Activa"
+                    },
+                    color = colorEstado,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (incidencia.fotoPrincipalUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = incidencia.fotoPrincipalUrl,
-                        contentDescription = "Foto de la incidencia",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                } else {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = categoria.icono,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(28.dp)
-                            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (incidencia.fotoPrincipalUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = incidencia.fotoPrincipalUrl,
+                            contentDescription = "Foto de la incidencia",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    } else {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = categoria.icono,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = incidencia.titulo.ifBlank {
+                                "Incidencia reportada"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = incidencia.ubicacion
+                                .direccionAproximada
+                                .ifBlank { "Ubicación en el mapa" },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                if (descripcion.isNotBlank()) {
                     Text(
-                        text = incidencia.titulo.ifBlank {
-                            "Incidencia reportada"
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text = incidencia.ubicacion
-                            .direccionAproximada
-                            .ifBlank { "Ubicación en el mapa" },
+                        text = descripcion,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
 
-            if (descripcion.isNotBlank()) {
-                Text(
-                    text = descripcion,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                HorizontalDivider()
 
-            HorizontalDivider()
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = textoReportantes,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Text(
-                    text = textoConfirmaciones,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Text(
-                    text = TimeUtils.tiempoTranscurrido(
-                        incidencia.fechaCreacion
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onSigueAhi,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(
-                        horizontal = 16.dp,
-                        vertical = 12.dp
-                    )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                    Text(
+                        text = textoReportantes,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
                     )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = textoConfirmaciones,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                    Text("Sigue ahí")
+                    Text(
+                        text = TimeUtils.tiempoTranscurrido(
+                            incidencia.fechaCreacion
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
-                Button(
-                    onClick = onVerDetalle,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryDark,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(
-                        horizontal = 16.dp,
-                        vertical = 12.dp
-                    )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Ver detalle")
+                    OutlinedButton(
+                        onClick = onSigueAhi,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(
+                            horizontal = 16.dp,
+                            vertical = 12.dp
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
+                        Text("Sigue ahí")
+                    }
+
+                    Button(
+                        onClick = onVerDetalle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryDark,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(
+                            horizontal = 16.dp,
+                            vertical = 12.dp
+                        )
+                    ) {
+                        Text("Ver detalle")
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

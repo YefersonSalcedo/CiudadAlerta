@@ -47,7 +47,7 @@ sealed class Categoria(
     )
 
     object Arboles : Categoria(
-        nombre = "Árboles (sin riesgo inminente)",
+        nombre = "Árboles Caidos",
         colorHex = 0xFF5D4037,
         icono = Icons.Default.Forest
     )
