@@ -1,5 +1,7 @@
 package com.ciudadalerta.ui.detail
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -98,8 +101,10 @@ fun IncidentDetailContent(
     onSigueAhi: () -> Unit,
     onResuelto: () -> Unit
 ) {
+    val context = LocalContext.current
     var isFollowing by remember { mutableStateOf(false) }
     var showDenounceSheet by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
     var newCommentText by remember { mutableStateOf("") }
 
     if (showDenounceSheet) {
@@ -120,8 +125,35 @@ fun IncidentDetailContent(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
                 },
                 actions = {
-                    IconButton(onClick = { showDenounceSheet = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Compartir") },
+                                onClick = {
+                                    menuExpanded = false
+                                    compartirIncidencia(context, incidenciaDetail)
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Share, contentDescription = "Compartir")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Denunciar contenido") },
+                                onClick = {
+                                    menuExpanded = false
+                                    showDenounceSheet = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Flag, contentDescription = "Denunciar")
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceContainerLowest)
@@ -424,4 +456,26 @@ fun IncidentDetailScreenPreview() {
             onResuelto = {}
         )
     }
+}
+
+private fun compartirIncidencia(context: Context, incidencia: Incidencia?) {
+    if (incidencia == null) return
+
+    val titulo = incidencia.titulo.ifBlank { "Incidencia urbana reportada" }
+    val direccion = incidencia.ubicacion.direccionAproximada.ifBlank { "Ubicación en el mapa" }
+    val estado = if (incidencia.estado == EstadoIncidencia.RESUELTA) "Resuelta" else "Activa"
+    val lat = incidencia.ubicacion.latitud
+    val lng = incidencia.ubicacion.longitud
+    val urlMapa = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
+
+    val textoCompartir = "$titulo\nDirección: $direccion\nEstado: $estado\n$urlMapa"
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, titulo)
+        putExtra(Intent.EXTRA_TEXT, textoCompartir)
+    }
+
+    val chooser = Intent.createChooser(intent, "Compartir incidencia")
+    context.startActivity(chooser)
 }
