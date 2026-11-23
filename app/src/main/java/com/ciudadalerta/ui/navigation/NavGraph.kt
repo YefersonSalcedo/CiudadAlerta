@@ -20,6 +20,7 @@ import com.ciudadalerta.ui.report.DuplicateDetectionScreen
 import com.ciudadalerta.ui.report.GeminiAnalysisScreen
 import com.ciudadalerta.ui.report.ReportConfirmationScreen
 import com.ciudadalerta.ui.report.ReportViewModel
+import com.ciudadalerta.ui.stats.StatsScreen
 import com.google.firebase.auth.FirebaseAuth
 
 sealed class Screen(val route: String) {
@@ -37,6 +38,7 @@ sealed class Screen(val route: String) {
     object MyReports : Screen("my_reports")
     object Notifications : Screen("notifications")
     object Profile : Screen("profile")
+    object Stats : Screen("stats")
 }
 
 @Composable
@@ -145,12 +147,16 @@ fun CiudadAlertaNavGraph(
                 onNavigateToMap = { navController.navigateTab(Screen.Map.route) },
                 onNavigateToMyReports = { navController.navigateTab(Screen.MyReports.route) },
                 onNavigateToNotifications = { navController.navigateTab(Screen.Notifications.route) },
+                onNavigateToStats = { navController.navigate(Screen.Stats.route) },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
             )
+        }
+        composable(Screen.Stats.route) {
+            StatsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

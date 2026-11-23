@@ -32,6 +32,7 @@ fun ProfileScreen(
     onNavigateToMap: () -> Unit,
     onNavigateToMyReports: () -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToStats: () -> Unit,
     onLogout: () -> Unit
 ) {
     val uiState by authViewModel.uiState.collectAsState()
@@ -62,6 +63,7 @@ fun ProfileScreen(
         onNavigateToMap = onNavigateToMap,
         onNavigateToMyReports = onNavigateToMyReports,
         onNavigateToNotifications = onNavigateToNotifications,
+        onNavigateToStats = onNavigateToStats,
         onLogout = {
             authViewModel.cerrarSesion()
             onLogout()
@@ -79,6 +81,7 @@ fun ProfileContent(
     onNavigateToMap: () -> Unit,
     onNavigateToMyReports: () -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToStats: () -> Unit,
     onLogout: () -> Unit
 ) {
     Scaffold(
@@ -148,6 +151,38 @@ fun ProfileContent(
                 }
             }
 
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SurfaceContainerLowest,
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Impacto Comunitario",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Consulta métricas cívicas, tiempos de resolución e incidencias por categoría.",
+                        color = OnSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(
+                        onClick = onNavigateToStats,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(46.dp)
+                    ) {
+                        Icon(Icons.Default.BarChart, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Ver Estadísticas Cívicas", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             Button(
@@ -176,6 +211,7 @@ fun ProfileScreenPreview() {
             onNavigateToMap = {},
             onNavigateToMyReports = {},
             onNavigateToNotifications = {},
+            onNavigateToStats = {},
             onLogout = {}
         )
     }
