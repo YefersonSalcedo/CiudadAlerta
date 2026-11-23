@@ -31,6 +31,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ciudadalerta.data.model.Notificacion
 import com.ciudadalerta.data.util.TimeUtils
+import com.ciudadalerta.ui.components.EstadoCargando
+import com.ciudadalerta.ui.components.EstadoVacio
 import com.ciudadalerta.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,48 +133,14 @@ fun NotificationsContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                EstadoCargando(mensaje = "Cargando alertas…", modifier = Modifier.padding(top = 16.dp))
             } else if (notificaciones.isEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceContainerLowest,
-                    shadowElevation = 1.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.NotificationsNone,
-                            contentDescription = null,
-                            tint = OutlineColor,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Aún no tienes alertas",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Cuando haya novedades cerca de tu zona o solicitudes de confirmación, aparecerán aquí.",
-                            color = OnSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                EstadoVacio(
+                    icono = Icons.Default.NotificationsNone,
+                    titulo = "Aún no tienes alertas",
+                    mensaje = "Cuando haya novedades cerca de tu zona o solicitudes de confirmación, aparecerán aquí.",
+                    modifier = Modifier.padding(top = 16.dp)
+                )
             } else {
                 Text(
                     "Tus Alertas",

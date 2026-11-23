@@ -22,6 +22,8 @@ import com.ciudadalerta.data.model.Denuncia
 import com.ciudadalerta.data.model.EstadoIncidencia
 import com.ciudadalerta.data.model.Reporte
 import com.ciudadalerta.data.util.TimeUtils
+import com.ciudadalerta.ui.components.EstadoCargando
+import com.ciudadalerta.ui.components.EstadoError
 import com.ciudadalerta.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
 
@@ -155,9 +157,9 @@ fun IncidentDetailContent(
         }
     ) { padding ->
         if (cargando && incidenciaDetail == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            EstadoCargando(mensaje = "Cargando detalle del incidente…", modifier = Modifier.fillMaxSize().padding(padding))
+        } else if (incidenciaDetail == null) {
+            EstadoError(mensaje = "No se encontró la información de la incidencia.", modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp))
         } else {
             val inc = incidenciaDetail
             LazyColumn(
