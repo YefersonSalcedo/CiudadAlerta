@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Categoria(
     val nombre: String,
+    val nombreCorto: String = nombre,
     val colorHex: Long,
     val icono: ImageVector
 ) {
@@ -24,18 +25,21 @@ sealed class Categoria(
 
     object Alumbrado : Categoria(
         nombre = "Alumbrado público",
+        nombreCorto = "Alumbrado",
         colorHex = 0xFFF57F17,
         icono = Icons.Default.Lightbulb
     )
 
     object Residuos : Categoria(
         nombre = "Residuos y aseo",
+        nombreCorto = "Residuos",
         colorHex = 0xFF00897B,
         icono = Icons.Default.RestoreFromTrash
     )
 
     object Parques : Categoria(
         nombre = "Parques y zonas verdes",
+        nombreCorto = "Parques",
         colorHex = 0xFF2E7D32,
         icono = Icons.Default.Park
     )
@@ -48,12 +52,14 @@ sealed class Categoria(
 
     object Arboles : Categoria(
         nombre = "Árboles Caidos",
+        nombreCorto = "Árboles",
         colorHex = 0xFF5D4037,
         icono = Icons.Default.Forest
     )
 
     object Animales : Categoria(
         nombre = "Animales abandonados",
+        nombreCorto = "Animales",
         colorHex = 0xFF7B1FA2,
         icono = Icons.Default.Pets
     )
@@ -94,7 +100,8 @@ sealed class Categoria(
             val nombre = nombreRaw.trim()
 
             return CATALOGO.firstOrNull {
-                it.nombre.equals(nombre, ignoreCase = true)
+                it.nombre.equals(nombre, ignoreCase = true) ||
+                        it.nombreCorto.equals(nombre, ignoreCase = true)
             } ?: CATALOGO.firstOrNull {
                 it.nombre.contains(nombre, ignoreCase = true) ||
                         nombre.contains(it.nombre, ignoreCase = true)

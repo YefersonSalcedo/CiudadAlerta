@@ -22,6 +22,12 @@ class MapViewModel(
 
     private val _incidenciaSeleccionadaId = MutableStateFlow<String?>(null)
 
+    private val _incidenciasConfirmadas = MutableStateFlow<Set<String>>(emptySet())
+    val incidenciasConfirmadas: StateFlow<Set<String>> = _incidenciasConfirmadas.asStateFlow()
+
+    private val _mensajeUi = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val mensajeUi: SharedFlow<String> = _mensajeUi.asSharedFlow()
+
     val incidencias: StateFlow<List<Incidencia>> = incidenciasRepository.observarIncidenciasActivas()
         .stateIn(
             scope = viewModelScope,
@@ -75,10 +81,15 @@ class MapViewModel(
     }
 
     fun marcarSigueAhi(incidenciaId: String) {
+        if (incidenciaId in _incidenciasConfirmadas.value) return
         viewModelScope.launch {
             try {
                 incidenciasRepository.marcarSigueAhi(incidenciaId)
-            } catch (_: Exception) {}
+                _incidenciasConfirmadas.update { it + incidenciaId }
+                _mensajeUi.tryEmit("Confirmaste que la incidencia sigue ahí")
+            } catch (_: Exception) {
+                _mensajeUi.tryEmit("No se pudo registrar la confirmación")
+            }
         }
     }
 
@@ -87,7 +98,10 @@ class MapViewModel(
             val uid = auth.currentUser?.uid ?: return@launch
             try {
                 incidenciasRepository.marcarResuelto(incidenciaId, uid)
-            } catch (_: Exception) {}
+                _mensajeUi.tryEmit("Incidencia marcada como resuelta")
+            } catch (_: Exception) {
+                _mensajeUi.tryEmit("No se pudo marcar como resuelta")
+            }
         }
     }
 }

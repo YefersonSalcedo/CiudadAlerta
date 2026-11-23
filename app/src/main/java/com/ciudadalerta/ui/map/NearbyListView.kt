@@ -39,7 +39,8 @@ fun NearbyListView(
     incidenciasList: List<Incidencia>,
     userLocation: LatLng?,
     onNavigateToDetail: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(16.dp)
 ) {
     val incidenciasOrdenadas = remember(incidenciasList, userLocation) {
         if (userLocation != null) {
@@ -60,7 +61,8 @@ fun NearbyListView(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(contentPadding)
+                .padding(horizontal = 24.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -100,7 +102,7 @@ fun NearbyListView(
     } else {
         LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (userLocation == null) {
@@ -121,7 +123,7 @@ fun NearbyListView(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Ubicación no disponible. Mostrando incidencias ordenadas por fecha reciente.",
+                                text = "Ubicación no disponible. Ordenadas por fecha reciente.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -158,6 +160,8 @@ private fun TarjetaIncidenciaItem(
 ) {
     val categoria = Categoria.fromString(incidencia.categoria)
     val resuelta = incidencia.estado == EstadoIncidencia.RESUELTA
+    val mostrarDescripcion = incidencia.descripcion.isNotBlank() &&
+            incidencia.descripcion.trim() != incidencia.titulo.trim()
 
     val textoDistancia = distanciaMetros?.let { m ->
         if (m < 1000) {
@@ -172,7 +176,7 @@ private fun TarjetaIncidenciaItem(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shadowElevation = 3.dp,
+        shadowElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -183,7 +187,6 @@ private fun TarjetaIncidenciaItem(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Fila Superior: Categoría y Estado
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -196,19 +199,19 @@ private fun TarjetaIncidenciaItem(
                     Surface(
                         shape = CircleShape,
                         color = Color(categoria.colorHex),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = categoria.icono,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     }
                     Text(
-                        text = categoria.nombre,
+                        text = categoria.nombreCorto,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(categoria.colorHex)
@@ -221,7 +224,7 @@ private fun TarjetaIncidenciaItem(
                 ) {
                     Text(
                         text = if (resuelta) "Resuelta" else "Activa",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (resuelta) Color(0xFF1565C0) else Color(0xFFE65100)
@@ -229,7 +232,6 @@ private fun TarjetaIncidenciaItem(
                 }
             }
 
-            // Cuerpo principal: Foto + Detalles
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -240,21 +242,21 @@ private fun TarjetaIncidenciaItem(
                         contentDescription = "Foto de la incidencia",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(72.dp)
+                            .size(68.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
                 } else {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(72.dp)
+                        modifier = Modifier.size(68.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = categoria.icono,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(30.dp)
                             )
                         }
                     }
@@ -266,7 +268,7 @@ private fun TarjetaIncidenciaItem(
                 ) {
                     Text(
                         text = incidencia.titulo.ifBlank { "Incidencia reportada" },
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -280,7 +282,7 @@ private fun TarjetaIncidenciaItem(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    if (incidencia.descripcion.isNotBlank()) {
+                    if (mostrarDescripcion) {
                         Text(
                             text = incidencia.descripcion,
                             style = MaterialTheme.typography.bodySmall,
@@ -294,7 +296,6 @@ private fun TarjetaIncidenciaItem(
 
             HorizontalDivider()
 
-            // Fila Inferior: Distancia, Tiempo transcurrido y Reportes
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -302,7 +303,7 @@ private fun TarjetaIncidenciaItem(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (textoDistancia != null) {
                         Surface(
@@ -337,27 +338,29 @@ private fun TarjetaIncidenciaItem(
                     )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF263238),
-                    contentColor = Color.White
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                if (incidencia.contadorReportes > 1) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF263238),
+                        contentColor = Color.White
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ReportProblem,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = "${incidencia.contadorReportes}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ReportProblem,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "${incidencia.contadorReportes}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
