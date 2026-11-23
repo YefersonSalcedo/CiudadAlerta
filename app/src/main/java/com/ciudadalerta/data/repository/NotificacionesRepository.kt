@@ -79,4 +79,22 @@ class NotificacionesRepository(
             .update("leida", true)
             .await()
     }
+
+    /**
+     * Observa las incidencias seguidas por un usuario específico ordenadas en el cliente por fechaCreacion descendente.
+     */
+    fun observarIncidenciasSeguidas(uid: String): Flow<List<Incidencia>> = callbackFlow {
+        val listener = incidenciasCol
+            .whereArrayContains("seguidoresIds", uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val lista = snapshot?.toObjects(Incidencia::class.java)
+                    ?.sortedByDescending { it.fechaCreacion } ?: emptyList()
+                trySend(lista)
+            }
+        awaitClose { listener.remove() }
+    }
 }

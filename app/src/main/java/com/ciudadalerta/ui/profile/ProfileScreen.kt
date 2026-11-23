@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import androidx.compose.foundation.clickable
 import com.ciudadalerta.ui.auth.AuthUiState
 import com.ciudadalerta.ui.auth.AuthViewModel
 import com.ciudadalerta.ui.theme.*
@@ -29,14 +30,17 @@ import androidx.compose.ui.tooling.preview.Preview
 @Composable
 fun ProfileScreen(
     authViewModel: AuthViewModel = viewModel(),
+    followedViewModel: FollowedIncidentsViewModel = viewModel(),
     onNavigateToMap: () -> Unit,
     onNavigateToMyReports: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToStats: () -> Unit,
+    onNavigateToFollowed: () -> Unit,
     onLogout: () -> Unit
 ) {
     val uiState by authViewModel.uiState.collectAsState()
     val firebaseUser = authViewModel.currentUser
+    val incidenciasSeguidas by followedViewModel.incidenciasSeguidas.collectAsState()
 
     val nombre = when (val state = uiState) {
         is AuthUiState.Success -> state.usuario.nombre
@@ -60,10 +64,12 @@ fun ProfileScreen(
         correo = correo,
         nivelPuntos = nivelPuntos,
         fotoUrl = fotoUrl,
+        seguidasCount = incidenciasSeguidas.size,
         onNavigateToMap = onNavigateToMap,
         onNavigateToMyReports = onNavigateToMyReports,
         onNavigateToNotifications = onNavigateToNotifications,
         onNavigateToStats = onNavigateToStats,
+        onNavigateToFollowed = onNavigateToFollowed,
         onLogout = {
             authViewModel.cerrarSesion()
             onLogout()
@@ -78,10 +84,12 @@ fun ProfileContent(
     correo: String,
     nivelPuntos: String,
     fotoUrl: String?,
+    seguidasCount: Int = 0,
     onNavigateToMap: () -> Unit,
     onNavigateToMyReports: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToStats: () -> Unit,
+    onNavigateToFollowed: () -> Unit,
     onLogout: () -> Unit
 ) {
     Scaffold(
@@ -155,6 +163,49 @@ fun ProfileContent(
                 shape = RoundedCornerShape(16.dp),
                 color = SurfaceContainerLowest,
                 shadowElevation = 1.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToFollowed)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = PrimaryFixed,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = PrimaryDark, modifier = Modifier.size(22.dp))
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Incidencias que sigo ($seguidasCount)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "Gestiona las novedades que tienes guardadas",
+                                color = OnSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = OutlineColor)
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SurfaceContainerLowest,
+                shadowElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -208,10 +259,12 @@ fun ProfileScreenPreview() {
             correo = "maria.silva@ejemplo.com",
             nivelPuntos = "Nivel 3 • 120 pts cívicos",
             fotoUrl = null,
+            seguidasCount = 2,
             onNavigateToMap = {},
             onNavigateToMyReports = {},
             onNavigateToNotifications = {},
             onNavigateToStats = {},
+            onNavigateToFollowed = {},
             onLogout = {}
         )
     }
