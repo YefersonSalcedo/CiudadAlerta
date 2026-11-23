@@ -1,7 +1,9 @@
 package com.ciudadalerta.ui.map
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -12,6 +14,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,6 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -157,12 +166,12 @@ private fun SelectorCapasMapa(
     Box(modifier = modifier) {
         Surface(
             shape = CircleShape,
-            color = SurfaceContainerLowest,
+            color = Color.White,
             shadowElevation = 4.dp,
             modifier = Modifier.size(40.dp)
         ) {
-            IconButton(onClick = { abierto = true }) {
-                Icon(Icons.Default.Layers, contentDescription = "Capas del mapa", tint = PrimaryDark)
+            IconButton(onClick = { abierto = true }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.Layers, contentDescription = "Capas del mapa", tint = PrimaryDark, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -236,13 +245,19 @@ fun MapScreenContent(
     var isMapView by rememberSaveable { mutableStateOf(true) }
     var tipoMapa by rememberSaveable { mutableStateOf(MapType.SATELLITE) }
     var temaMapa by rememberSaveable { mutableStateOf(ComposeMapColorScheme.LIGHT) }
+    var busquedaTexto by rememberSaveable { mutableStateOf("") }
+
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     val clusterItems = remember(incidenciasList) {
         incidenciasList.map { IncidenciaClusterItem(it) }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -315,8 +330,8 @@ fun MapScreenContent(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     mapColorScheme = temaMapa,
-                    // Deja libre la cabecera (interruptor + chips) para que no tape el botón de mi ubicación
-                    contentPadding = PaddingValues(top = 56.dp),
+                    // Deja libre la cabecera (búsqueda + chips + capas) para que el botón nativo de ubicación quede abajo
+                    contentPadding = PaddingValues(top = 170.dp),
                     properties = MapProperties(
                         mapType = tipoMapa,
                         isMyLocationEnabled = tienePermiso,
@@ -483,16 +498,106 @@ fun MapScreenContent(
                     onNavigateToDetail = onNavigateToDetail,
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.background)
-                        .padding(top = 56.dp, bottom = 88.dp)
+                        .padding(top = 110.dp, bottom = 88.dp)
                 )
             }
 
-            // Cabecera: filtros de categoría (el interruptor Mapa/Lista va abajo, junto al botón Reportar)
+            // Cabecera: Búsqueda de ubicación + Filtros de categoría
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp)
+                    .padding(top = 10.dp)
             ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.White,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Buscar",
+                            tint = PrimaryDark,
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (busquedaTexto.isEmpty()) {
+                                Text(
+                                    text = "Buscar dirección o ciudad...",
+                                    fontSize = 14.sp,
+                                    color = OnSurfaceVariant
+                                )
+                            }
+                            BasicTextField(
+                                value = busquedaTexto,
+                                onValueChange = { busquedaTexto = it },
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF263238),
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = {
+                                        val query = busquedaTexto.trim()
+                                        if (query.isNotBlank()) {
+                                            focusManager.clearFocus()
+                                            scope.launch {
+                                                val resultado = buscarUbicacionConGeocoder(context, query)
+                                                resultado.onSuccess { latLng ->
+                                                    cameraPositionState.animate(
+                                                        CameraUpdateFactory.newLatLngZoom(latLng, 15f)
+                                                    )
+                                                }.onFailure { err ->
+                                                    val mensaje = if (err is NoSuchElementException) {
+                                                        "No se encontraron resultados para \"$query\""
+                                                    } else {
+                                                        "Error al buscar la ubicación. Revisa tu conexión."
+                                                    }
+                                                    snackbarHostState.showSnackbar(mensaje)
+                                                }
+                                            }
+                                        }
+                                    }
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        if (busquedaTexto.isNotEmpty()) {
+                            IconButton(
+                                onClick = { busquedaTexto = "" },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Limpiar",
+                                    tint = OnSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -884,5 +989,25 @@ fun MapScreenPreview() {
             onNavigateToNotifications = {},
             onNavigateToProfile = {}
         )
+    }
+}
+
+private suspend fun buscarUbicacionConGeocoder(
+    context: Context,
+    query: String
+): Result<LatLng> = withContext(Dispatchers.IO) {
+    try {
+        if (query.isBlank()) return@withContext Result.failure(IllegalArgumentException("Búsqueda vacía"))
+        val geocoder = Geocoder(context)
+        @Suppress("DEPRECATION")
+        val lista = geocoder.getFromLocationName(query, 1)
+        if (!lista.isNullOrEmpty()) {
+            val dir = lista[0]
+            Result.success(LatLng(dir.latitude, dir.longitude))
+        } else {
+            Result.failure(NoSuchElementException("Sin resultados"))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 }
