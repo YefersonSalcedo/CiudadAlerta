@@ -1,267 +1,256 @@
 # CiudadAlerta
 
-Plataforma colaborativa para Android, al estilo de Waze, donde los ciudadanos reportan y confirman **incidencias urbanas no urgentes** (huecos, alumbrado dañado, basuras acumuladas, daños en andenes, etc.) para que toda la comunidad tenga visibilidad de lo que pasa en su ciudad.
+**CiudadAlerta** es una plataforma colaborativa para Android (estilo Waze cívico) orientada a que los ciudadanos reporten, confirmen y hagan seguimiento en tiempo real de **incidencias urbanas no urgentes** en espacio público (huecos en vías, fallas en alumbrado público, basuras acumuladas, semáforos dañados, entre otros).
 
-> CiudadAlerta **no** es un canal de emergencias. Para situaciones de riesgo inmediato, contacta a las autoridades (en Colombia, línea **123**).
-
----
-
-## Tabla de contenido
-
-1. [Características](#-características)
-2. [Ciclo de vida de una incidencia](#-ciclo-de-vida-de-una-incidencia)
-3. [Tecnologías](#-tecnologías)
-4. [Requisitos previos](#-requisitos-previos)
-5. [Puesta en marcha](#-puesta-en-marcha)
-   - [1. Clonar el repositorio](#1-clonar-el-repositorio)
-   - [2. Crear el proyecto en la consola de Firebase](#2-crear-el-proyecto-en-la-consola-de-firebase)
-   - [3. Registrar la app Android y `google-services.json`](#3-registrar-la-app-android-y-google-servicesjson)
-   - [4. Authentication (Google Sign-In)](#4-authentication-google-sign-in)
-   - [5. Cloud Firestore](#5-cloud-firestore)
-   - [6. Cloud Storage](#6-cloud-storage)
-   - [7. App Check y token de depuración](#7-app-check-y-token-de-depuración)
-   - [8. API key de Gemini](#8-api-key-de-gemini)
-   - [9. Clave del mapa (Google Maps)](#9-clave-del-mapa-google-maps)
-   - [10. Ejecutar la app](#10-ejecutar-la-app)
+> **Aviso de Seguridad:** CiudadAlerta **no** es un canal de atención de emergencias vitales. Para situaciones de riesgo inmediato, contacta a la línea oficial de emergencias (en Colombia, línea **123**).
 
 ---
 
-## Características
+## Servicios Integrados (8 Servicios del Sistema)
 
-- **Inicio de sesión únicamente con Google** (sin acceso anónimo ni correo/contraseña).
-- **Reporte de incidencias con foto**:
-  - Foto tomada con la **cámara** --> la ubicación se toma **automáticamente**.
-  - Foto elegida de la **galería** --> el usuario **selecciona la ubicación manualmente**.
-- **Análisis de la foto con IA (Gemini)**: devuelve un JSON con categoría, estado, motivo de bloqueo, descripción y si se trata de una emergencia.
-- **Validación comunitaria**: cualquier usuario puede marcar una incidencia como resuelta.
-- **Denuncias de contenido**: se puede denunciar un reporte por inapropiado o porque no representa una incidencia real.
-- **Seguimiento automático**: tras un tiempo, se pregunta a quienes reportaron si la incidencia sigue presente.
+CiudadAlerta integra los siguientes **8 servicios principales de Cloud & AI**:
 
----
-
-## Ciclo de vida de una incidencia
-
-```
- Reportada ──► Activa ──► (pasado el tiempo X) ──► Se consulta a quienes reportaron
-                 │                                         │
-                 │                          ¿Sigue ahí? ◄──┴──► ¿Ya se solucionó?
-                 │
-                 ├──► N marcas de "resuelta" ──► Se muestra como RESUELTA por un tiempo
-                 │                                  └──► Desaparece a los pocos días
-                 │
-                 └──► M denuncias ──► Se oculta para revisión
-```
-
-| Parámetro | Significado |
-|-----------|-------------|
-| **X** | Tiempo tras el cual se pide confirmar a quienes reportaron si la incidencia sigue o se resolvió |
-| **N** | Número de marcas de "resuelta" necesarias para mostrarla como resuelta |
-| **M** | Número de denuncias necesarias para ocultar una incidencia |
-
+1. **Firebase Authentication (Google Sign-In):** Autenticación única mediante credenciales nativas de Google Credential Manager (sin acceso anónimo ni correos/contraseñas).
+2. **Cloud Firestore:** Base de datos NoSQL en tiempo real para almacenar el catálogo de incidencias, comentarios, marcas de resuelto, alertas y perfiles ciudadanos.
+3. **Cloud Storage:** Almacenamiento seguro de imágenes adjuntas en los reportes e incidencias (máximo 5 MB por imagen).
+4. **Firebase Cloud Messaging (FCM):** Notificaciones Push en segundo plano (*data-only*) para alertar a los seguidores sobre cambios de estado o solicitudes de confirmación.
+5. **Firebase App Check:** Protección de infraestructura y backend validando solicitudes legítimas mediante **Play Integrity** en producción y **Debug Provider** en desarrollo.
+6. **Google Gemini API (Google AI Studio):** Análisis multimodal con el modelo `gemini-3.5-flash-lite` para categorizar fotos, verificar espacio público, detectar riesgos vitales y filtrar violaciones de privacidad.
+7. **Google Maps SDK for Android:** Renderizado del mapa interactivo en tiempo real con marcadores personalizados, ubicación del usuario y agrupación de incidencias cercanas.
+8. **Firebase Cloud Functions (v2):** Lógica de servidor serverless en Node.js/TypeScript (`notificarSeguidores` y tarea cron `verificar48h` para re-verificación a las 48 horas).
 
 ---
 
-## Tecnologías
+## Estructura de Capas y Carpetas
 
-- **Firebase**
-  - Authentication (Google Sign-In)
-  - Cloud Firestore (base de datos)
-  - Cloud Storage (fotos de los reportes)
-  - App Check (protección de backend)
-- **Google Gemini API** (análisis de imágenes), usando la API key de Google AI Studio
-- **Google Maps Platform** (Maps SDK for Android) para el mapa de incidencias
+El proyecto sigue una arquitectura **Clean Architecture / MVVM** con Jetpack Compose y estado reactivo basado en `StateFlow` y `Coroutines`:
 
----
-
-## Puesta en marcha
-
-### 1. Clonar el repositorio
-
-```bash
-git clone https://github.com/YefersonSalcedo/CiudadAlerta.git
-cd CiudadAlerta
+```text
+CiudadAlerta/
+├── app/src/main/java/com/ciudadalerta/
+│   ├── data/                           # Capa de Datos y Modelos
+│   │   ├── ai/                         # Servicio de integración con Gemini API (GeminiAnalysisService)
+│   │   ├── config/                     # Parámetros comunitarios globales (CiudadAlertaConfig)
+│   │   ├── fcm/                        # Servicio de notificaciones Push (CiudadAlertaMessagingService)
+│   │   ├── model/                      # Clases de datos (Incidencia, Usuario, Alerta, Reporte, etc.)
+│   │   ├── repository/                 # Repositorios (Auth, Incidencias, Notificaciones)
+│   │   └── util/                       # GeoUtils (geohash, distancias), LocationUtils, TimeUtils
+│   ├── ui/                             # Capa de Interfaz de Usuario (Jetpack Compose + Material 3)
+│   │   ├── auth/                       # LoginScreen & AuthViewModel
+│   │   ├── detail/                     # IncidentDetailScreen & DenounceBottomSheet
+│   │   ├── map/                        # MapScreen, NearbyListView & MapViewModel
+│   │   ├── myreports/                  # MyReportsScreen & MyReportsViewModel
+│   │   ├── navigation/                 # NavGraph & Rutas de navegación
+│   │   ├── notifications/              # NotificationsScreen & NotificationsViewModel
+│   │   ├── profile/                    # ProfileScreen & gestión de sesión
+│   │   ├── report/                     # CreateReport, GeminiAnalysis, DuplicateDetection, ReportConfirmation
+│   │   └── theme/                      # Tema Material 3, colores y tipografía
+│   └── MainActivity.kt                 # Punto de entrada de la app Android
+├── functions/                          # Firebase Cloud Functions (TypeScript v2)
+│   ├── src/index.ts                    # Triggers: notificarSeguidores y verificar48h
+│   └── package.json
+├── seed/                               # Script de poblamiento de datos de prueba
+│   ├── seed.js                         # Carga masiva en Firestore y Storage
+│   └── fotos/                          # Imágenes de prueba
+├── docs/
+│   └── ARQUITECTURA.md                 # Documentación detallada de arquitectura
+└── README.md                           # Guía principal del proyecto
 ```
 
-Abre la carpeta en Android Studio y espera a que termine la sincronización de Gradle.
+---
 
-### 2. Crear el proyecto en la consola de Firebase
+## Flujo Completo de Creación de un Reporte
 
-1. Entra a la [consola de Firebase](https://console.firebase.google.com/) con tu cuenta de Google.
-2. Haz clic en **Agregar proyecto** y ponle un nombre (por ejemplo, `CiudadAlerta`).
-3. Google Analytics es opcional; puedes activarlo o no.
-4. Si trabajas en equipo, **un solo integrante crea el proyecto** y agrega a los demás
+```text
+ [ 1. Captura de Foto ]
+        │
+        ▼
+ [ 2. Análisis con Gemini IA ] ──(¿Riesgo Vital / Privacidad?)──► [ Bloqueado con alerta 123 ]
+        │
+        ▼ (Válido)
+ [ 3. Detección de Duplicados ] ──(¿Existe reporte cercano?)───► [ Unirse al reporte existente ]
+        │
+        ▼ (No existe duplicado)
+ [ 4. Confirmación y Publicación en Mapa ] ──► [ Notificación a la Comunidad ]
+```
 
-### 3. Registrar la app Android y `google-services.json`
+1. **Captura / Selección de Foto:**
+   - Toma con la cámara: la ubicación GPS se obtiene **automáticamente**.
+   - Selección desde galería: el usuario selecciona la ubicación **manualmente** mediante un selector de mapa.
+2. **Análisis con Gemini IA (`GeminiAnalysisService`):**
+   - La imagen se envía a Gemini (`gemini-3.5-flash-lite`).
+   - Retorna la categoría sugerida, descripción concisa (máx. 2 frases) y verifica privacidad (rostros, placas) o riesgo vital (incendios, cables sueltos). Si detecta riesgo vital, bloquea la app y sugiere llamar al **123**.
+3. **Detección de Duplicados Cercanos:**
+   - Calcula incidencias de la misma categoría en un radio predeterminado (`RADIO_AGRUPACION_DEFAULT_METROS = 40m`).
+   - Permite al usuario **unirse a un reporte existente** (incrementando contadores) o publicar una **nueva incidencia**.
+4. **Publicación y Confirmación Comunitaria:**
+   - La incidencia se guarda en Firestore (`incidencias/`) con su correspondiente `geohash`.
+   - Se muestra en el mapa y queda disponible para confirmación ("Sigue ahí"), resolución comunitaria ($N$ marcas) o denuncias ($M$ denuncias para ocultación).
 
-1. En la consola: **Configuración del proyecto --> General --> Tus apps --> Agregar app --> Android**.
-2. Escribe el **nombre del paquete** exactamente como está en `app/build.gradle(.kts)` (`applicationId`).
-3. Agrega la **huella digital SHA-1 y SHA-256** de tu clave de depuración (**obligatorio** para Google Sign-In):
+---
 
+## Configuración del Proyecto
+
+### 1. Requisitos Previos
+- Android Studio con JDK 17+.
+- Proyecto creado en la [Consola de Firebase](https://console.firebase.google.com/).
+
+### 2. Archivo `google-services.json`
+1. Registra el `applicationId` de tu app (`com.ciudadalerta`) en la consola de Firebase.
+2. Genera y registra las huellas digitales SHA-1 y SHA-256 ejecutando:
    ```bash
    ./gradlew signingReport
    ```
+3. Descarga el archivo `google-services.json` y colócalo en la carpeta `app/google-services.json`.
 
-4. Descarga el archivo **`google-services.json`** y colócalo en:
+### 3. Claves de API en `local.properties`
+Crea o edita el archivo `local.properties` en la raíz de tu proyecto e incluye las claves necesarias (**nunca las subas a Git**):
 
-   ```
-   app/google-services.json
-   ```
+```properties
+GEMINI_API_KEY=tu_clave_de_google_ai_studio
+MAPS_API_KEY=tu_clave_de_google_maps_sdk
+```
 
-   > Si agregas nuevas huellas SHA después de descargarlo, vuelve a descargar el archivo para tenerlo actualizado.
+- **Gemini API Key:** Obtén una clave gratuita en [Google AI Studio](https://aistudio.google.com/).
+- **Maps API Key:** Habilita *Maps SDK for Android* en [Google Cloud Console](https://console.cloud.google.com/) para el mismo proyecto de Firebase.
 
-### 4. Authentication (Google Sign-In)
-
-1. En la consola: **Compilación --> Authentication --> Comenzar**.
-2. Pestaña **Sign-in method** --> habilita **Google**.
-3. Selecciona un **correo de asistencia del proyecto** y guarda.
-4. **No habilites** los proveedores *Anónimo* ni *Correo electrónico/contraseña*: la app solo permite Google.
-5. Verifica que las huellas SHA-1/SHA-256 estén registradas (paso 3); si no, el inicio de sesión fallará con errores como `DEVELOPER_ERROR` o código `10`.
-
-### 5. Cloud Firestore
-
-1. **Compilación --> Firestore Database --> Crear base de datos**.
-2. Elige una **ubicación** cercana a tus usuarios (no se puede cambiar después).
-3. Inicia en **modo de producción** y luego publica las reglas de seguridad (paso 4).
-4. Reglas utilizadas por el proyecto (pestaña **Reglas** de Firestore):
-
-   ```
+### 4. Configuración en Firebase Console
+- **Authentication:** Habilita el proveedor **Google** en Sign-in method.
+- **Firestore Database:** Crea la base de datos en modo producción e introduce las reglas de seguridad:
+  ```json
    rules_version = '2';
    service cloud.firestore {
-     match /databases/{database}/documents {
+   match /databases/{database}/documents {
+    // Auxiliar: verifica si la petición proviene de un usuario autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
 
-       // Incidencias del mapa: lectura pública para que todos vean el mapa, escritura autenticada
-       match /incidencias/{incidenciaId} {
-         allow read: if true;
-         allow create, update: if request.auth != null;
-       }
+    // Auxiliar: verifica si el usuario autenticado es el propietario del recurso
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
 
-       // Perfil del ciudadano
-       match /usuarios/{userId} {
-         allow read: if request.auth != null;
-         allow write: if request.auth != null && request.auth.uid == userId;
-       }
+    // Colección: incidencias
+    match /incidencias/{incidenciaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.auth.uid in request.resource.data.reportantesIds;
 
-       // Demás colecciones
-       match /reportes/{reporteId} { allow read, create: if request.auth != null; }
-       match /comentarios/{comentarioId} { allow read, create: if request.auth != null; }
-       match /marcasResuelto/{marcaId} { allow read, create: if request.auth != null; }
-       match /denuncias/{denunciaId} { allow read, create: if request.auth != null; }
-     }
-   }
-   ```
+      // Permite actualizaciones únicamente sobre los campos modificados por las funciones del cliente
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'contadorReportes',
+          'reportantesIds',
+          'marcasResuelto',
+          'estado',
+          'fechaResuelta',
+          'contadorConfirmaciones',
+          'ultimaVerificacionNotificada',
+          'denunciasCount',
+          'ocultoDelMapa',
+          'seguidoresIds'
+        ]);
 
-   **Colecciones del proyecto:**
+      allow delete: if false;
+    }
 
-   | Colección | Lectura | Escritura |
-   |-----------|---------|-----------|
-   | `incidencias` | Pública (cualquiera ve el mapa) | Crear y actualizar: usuarios con sesión |
-   | `usuarios` | Usuarios con sesión | Solo el dueño del perfil (`uid == userId`) |
-   | `reportes`, `comentarios`, `marcasResuelto`, `denuncias` | Usuarios con sesión | Solo crear (no se pueden editar ni borrar) |
+    // Colección: reportes
+    match /reportes/{reporteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
+      allow update, delete: if false;
+    }
 
-5. Si la app muestra un error indicando que una consulta **requiere un índice**, el mensaje de Logcat incluye un enlace para crearlo automáticamente en la consola. Ábrelo y confirma.
+    // Colección: comentarios
+    match /comentarios/{comentarioId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
+      // Marcar "útil": solo puede cambiar utilCount
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['utilCount']);
+      // Borrar: solo el autor (quítalo si no se usa)
+      allow delete: if isAuthenticated() && resource.data.usuarioId == request.auth.uid;
+    }
 
-### 6. Cloud Storage
+    // Colección: marcasResuelto (ID formato: {usuarioId}_{contenidoId})
+    match /marcasResuelto/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && docId == request.auth.uid + "_" + request.resource.data.contenidoId;
+      allow update, delete: if false;
+    }
 
-1. **Compilación --> Storage --> Comenzar**.
-2. Elige la ubicación y crea el bucket.
+    // Colección: denuncias (ID formato: {usuarioId}_{contenidoId})
+    match /denuncias/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && docId == request.auth.uid + "_" + request.resource.data.contenidoId;
+      allow update, delete: if false;
+    }
 
-   > Según las políticas vigentes de Firebase, crear un bucket puede requerir tener el proyecto en el **plan Blaze** (pago por uso, con una cuota gratuita).
+    // Colección: usuarios y subcolección de notificaciones
+    match /usuarios/{uid} {
+      allow read, write: if isOwner(uid);
 
-3. Reglas utilizadas por el proyecto (pestaña **Reglas** de Storage):
+      match /notificaciones/{notificacionId} {
+        allow read: if isOwner(uid);
+        // El cliente solo puede modificar el campo "leida"; nadie del cliente crea ni elimina
+        allow update: if isOwner(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+        allow create, delete: if false;
+      }
+    }
+}
+}
 
-   ```
-   rules_version = '2';
-   service firebase.storage {
-     match /b/{bucket}/o {
-       // Permite guardar y ver imágenes de incidencias de hasta 5MB
-       match /incidencias/{allPaths=**} {
-         allow read: if request.auth != null;
-         allow write: if request.auth != null
-                      && request.resource.size < 5 * 1024 * 1024
-                      && request.resource.contentType.matches('image/.*');
-       }
-       // Permite fotos de perfil de hasta 2MB
-       match /perfiles/{allPaths=**} {
-         allow read: if request.auth != null;
-         allow write: if request.auth != null
-                      && request.resource.size < 2 * 1024 * 1024
-                      && request.resource.contentType.matches('image/.*');
-       }
-     }
-   }
-   ```
+  ```
+- **App Check:** Registra el token de depuración impreso en Logcat (`DebugAppCheckProvider`) para probar en emuladores o dispositivos en modo debug.
 
-   | Ruta | Contenido | Límite | Acceso |
-   |------|-----------|--------|--------|
-   | `incidencias/` | Fotos de los reportes | 5 MB, solo imágenes | Lectura y escritura con sesión |
-   | `perfiles/` | Fotos de perfil | 2 MB, solo imágenes | Lectura y escritura con sesión |
+---
 
-  
-### 7. App Check y token de depuración
+## Cloud Functions y Poblamiento de Datos (Seed)
 
-App Check verifica que las peticiones a Firebase provengan de **tu app legítima**.
+### 1. Ejecución y Despliegue de Cloud Functions
 
-**En producción** se usa **Play Integrity**; **en desarrollo** (emulador o builds de depuración) se usa el **proveedor de depuración**, que requiere un **token de depuración** registrado.
+Las funciones en segundo plano se encuentran en la carpeta `functions/`.
 
-1. En la consola: **Compilación --> App Check --> Comenzar**.
-2. En la pestaña **Apps**, selecciona tu app Android y registra el proveedor **Play Integrity** (necesitarás las huellas SHA-256 ya registradas).
-3. Ejecuta la app en modo **debug** (ver paso 9). Con el proveedor de depuración, la app genera un token único por instalación y lo imprime en **Logcat**. Filtra por:
-
-   ```
-   DebugAppCheckProvider
-   ```
-
-   Verás un mensaje similar a:
-
-   ```
-   Enter this debug secret into the allow list in the Firebase Console for your project: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
-   ```
-
-4. Copia ese token y regístralo en la consola:
-   **App Check --> Apps --> (tu app) --> menú ⋮ --> Administrar tokens de depuración --> Agregar token de depuración**.
-5. Vuelve a ejecutar la app: las peticiones a Firebase ya deberían pasar la verificación.
-
-> **Cada integrante del equipo registra su propio token de depuración** (uno por cada dispositivo/emulador y reinstalación de la app, porque el token cambia al borrar los datos de la app).
-
-
-### 8. API key de Gemini
-
-El análisis de las fotos usa la **API de Gemini directa** (no Firebase AI Logic), con la clave gratuita de Google AI Studio.
-
-1. Entra a [Google AI Studio](https://aistudio.google.com/) con tu cuenta de Google.
-2. Ve a **Get API key --> Create API key** y copia la clave.
-3. Agrégala a tu archivo **`local.properties`** (en la raíz del proyecto, junto a `settings.gradle`):
-
-   ```properties
-   GEMINI_API_KEY=tu_api_key_aqui
-   ```
-
-4. `local.properties` **ya está ignorado por Git**; confirma que aparece en `.gitignore`. **Nunca subas tu API key al repositorio.**
-
-### 9. Clave del mapa (Google Maps)
-
-El mapa de incidencias usa **Maps SDK for Android**, que necesita su propia API key. Es **distinta** de la API key de Gemini y de la clave que Firebase crea automáticamente.
-
-1. Entra a la [consola de Google Cloud](https://console.cloud.google.com/) y selecciona **el mismo proyecto** de Firebase (cada proyecto de Firebase es también un proyecto de Google Cloud).
-2. Ve a **APIs y servicios --> Biblioteca**, busca **Maps SDK for Android** y pulsa **Habilitar**.
-   > Google Maps Platform exige tener una **cuenta de facturación** vinculada al proyecto, aunque incluye una cuota mensual gratuita. Revisa los precios y límites vigentes antes de publicar la app.
-3. Ve a **APIs y servicios --> Credenciales --> Crear credenciales --> Clave de API** y copia la clave.
-4. **Restringe la clave**:
-   - **Restricciones de la aplicación --> Apps para Android**: agrega el **nombre del paquete** y la huella **SHA-1** de cada integrante del equipo.
-   - **Restricciones de la API --> Restringir clave**: selecciona solo **Maps SDK for Android**.
-5. Guarda la clave en **`local.properties`**, junto a la de Gemini:
-```properties
-   GEMINI_API_KEY=tu_api_key_de_gemini
-   MAPS_API_KEY=tu_api_key_del_mapa
+```bash
+cd functions
+npm install
+npm run build
+firebase deploy --only functions
 ```
-> Igual que la de Gemini, **la clave del mapa no se sube al repositorio**. Aunque esté restringida por paquete y SHA-1, mantenla fuera de Git.
 
+- `notificarSeguidores`: Trigger cuando cambia un documento en `incidencias/{id}`. Envía alertas FCM a los seguidores.
+- `verificar48h`: Tarea cron (cada 6 horas) que evalúa si una incidencia activa superó las 48 horas sin actualización y solicita re-verificación.
 
-### 10. Ejecutar la app
+### 2. Script de Poblamiento (Seed Script)
 
-1. Conecta un dispositivo físico (con **depuración USB** activada) o inicia un emulador con Google Play Services.
-2. Selecciona la variante de compilación **debug**.
-3. Pulsa **Run ▶**.
-4. Al abrir la app, inicia sesión con tu cuenta de Google.
-5. Si es la primera vez que corres la app en ese dispositivo, registra el **token de depuración** de App Check (paso 7) y vuelve a ejecutarla.
+Para cargar datos de prueba reales en el mapa y la base de datos:
 
+```bash
+cd seed
+npm install
+```
+
+Coloca el archivo de credencial administrativa de Firebase `serviceAccount.json` en la carpeta `seed/` (descárgalo desde *Firebase Console -> Configuración de proyecto -> Cuentas de servicio -> Generar nueva clave privada*).
+
+Ejecuta el script configurando las variables de entorno:
+
+```bash
+# Cargar incidencias, comentarios y reportes de prueba:
+MI_UID="tu_uid_de_firebase_auth" STORAGE_BUCKET="tu-proyecto.firebasestorage.app" node seed.js
+
+# Para limpiar todos los datos de prueba creados (prefijo "demo-"):
+node seed.js --clean
+```
+
+---
+
+## Limitaciones Conocidas
+
+1. **Contadores actualizados desde el cliente:**
+   - Los incrementos de `contadorReportes`, `marcasResuelto` y `denunciasCount` se gestionan mediante transacciones y batches directamente desde la aplicación Android. En un entorno de producción a gran escala, es recomendable delegar estas validaciones a Cloud Functions o reglas de Firestore avanzadas para evitar manipulación por clientes modificados.
+2. **Notificaciones por seguimiento y no por zona:**
+   - Las alertas y notificaciones Push FCM se envían exclusivamente a los usuarios registrados en los arreglos `reportantesIds` o `seguidoresIds` de cada incidencia. Actualmente no se calculan notificaciones en tiempo real por geofencing / ubicación dinámica del usuario.
+3. **Sistema de puntos y niveles no implementado:**
+   - Aunque el modelo de datos `Usuario` define las propiedades `puntosCivicos` y `nivel`, la lógica de gamificación (acumulación automática de puntos por reportar o confirmar incidencias y subir de nivel) aún no está activamente integrada en la experiencia de usuario.

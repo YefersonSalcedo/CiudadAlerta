@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ciudadalerta.data.model.Incidencia
 import com.ciudadalerta.data.repository.IncidenciasRepository
+import com.ciudadalerta.data.util.GeoUtils
+import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,7 +17,11 @@ class MapViewModel(
 
     companion object {
         const val MIN_REPORTES_DESTACADA = 3
+        const val RADIO_ZONA_KM = 30.0
     }
+
+    private val _centroZona = MutableStateFlow<LatLng?>(null)
+    val centroZona: StateFlow<LatLng?> = _centroZona.asStateFlow()
 
     private val _categoriaSeleccionada = MutableStateFlow("Todas")
     val categoriaSeleccionada: StateFlow<String> = _categoriaSeleccionada.asStateFlow()
@@ -35,8 +41,29 @@ class MapViewModel(
             initialValue = emptyList()
         )
 
-    val incidenciaSeleccionada: StateFlow<Incidencia?> = combine(
+    val incidenciasEnZona: StateFlow<List<Incidencia>> = combine(
         incidencias,
+        _centroZona
+    ) { lista, centro ->
+        if (centro == null) {
+            lista
+        } else {
+            val radioMetros = RADIO_ZONA_KM * 1000.0
+            lista.filter { inc ->
+                GeoUtils.distanciaMetros(
+                    centro.latitude, centro.longitude,
+                    inc.ubicacion.latitud, inc.ubicacion.longitud
+                ) <= radioMetros
+            }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val incidenciaSeleccionada: StateFlow<Incidencia?> = combine(
+        incidenciasEnZona,
         _incidenciaSeleccionadaId,
         _categoriaSeleccionada
     ) { lista, incidenciaId, categoria ->
@@ -57,7 +84,7 @@ class MapViewModel(
     )
 
     val incidenciasFiltradas: StateFlow<List<Incidencia>> = combine(
-        incidencias,
+        incidenciasEnZona,
         _categoriaSeleccionada
     ) { lista, categoria ->
         if (categoria == "Todas") {
@@ -70,6 +97,11 @@ class MapViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
+
+    fun establecerCentroZona(latitud: Double, longitud: Double) {
+        _centroZona.value = LatLng(latitud, longitud)
+        _incidenciaSeleccionadaId.value = null
+    }
 
     fun seleccionarCategoria(categoria: String) {
         _categoriaSeleccionada.value = categoria

@@ -45,6 +45,7 @@ import com.ciudadalerta.data.model.Categoria
 import com.ciudadalerta.data.model.EstadoIncidencia
 import com.ciudadalerta.data.model.Incidencia
 import com.ciudadalerta.data.model.Ubicacion
+import com.ciudadalerta.data.util.GeoUtils
 import com.ciudadalerta.data.util.TimeUtils
 import com.ciudadalerta.data.util.obtenerUbicacionActual
 import com.ciudadalerta.ui.theme.*
@@ -107,10 +108,34 @@ fun MapScreen(
     LaunchedEffect(tienePermiso) {
         if (tienePermiso) {
             obtenerUbicacionActual(context)?.let { loc ->
-                userLocation = LatLng(loc.latitude, loc.longitude)
+                val latLng = LatLng(loc.latitude, loc.longitude)
+                userLocation = latLng
                 cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16f)
+                    CameraUpdateFactory.newLatLngZoom(latLng, 16f)
                 )
+            }
+        }
+    }
+
+    LaunchedEffect(userLocation) {
+        userLocation?.let { loc ->
+            viewModel.establecerCentroZona(loc.latitude, loc.longitude)
+        }
+    }
+
+    val centroZona by viewModel.centroZona.collectAsState()
+    var camaraFueraDeZona by remember { mutableStateOf(false) }
+
+    LaunchedEffect(cameraPositionState, centroZona) {
+        val centroLocal = centroZona ?: return@LaunchedEffect
+        snapshotFlow { cameraPositionState.isMoving }.collect { isMoving ->
+            if (!isMoving) {
+                val target = cameraPositionState.position.target
+                val dist = GeoUtils.distanciaMetros(
+                    centroLocal.latitude, centroLocal.longitude,
+                    target.latitude, target.longitude
+                )
+                camaraFueraDeZona = dist > (MapViewModel.RADIO_ZONA_KM * 500.0)
             }
         }
     }
@@ -118,7 +143,7 @@ fun MapScreen(
     val selectedCategoryFilter by viewModel.categoriaSeleccionada.collectAsState()
     val selectedIncident by viewModel.incidenciaSeleccionada.collectAsState()
     val incidenciasList by viewModel.incidenciasFiltradas.collectAsState()
-    val allIncidencias by viewModel.incidencias.collectAsState()
+    val incidenciasEnZonaList by viewModel.incidenciasEnZona.collectAsState()
     val confirmadasIds by viewModel.incidenciasConfirmadas.collectAsState()
 
     MapScreenContent(
@@ -126,11 +151,21 @@ fun MapScreen(
         selectedCategoryFilter = selectedCategoryFilter,
         selectedIncident = selectedIncident,
         incidenciasList = incidenciasList,
-        totalIncidenciasCount = allIncidencias.size,
+        totalIncidenciasCount = incidenciasEnZonaList.size,
         confirmadasIds = confirmadasIds,
         mensajeUi = viewModel.mensajeUi,
         tienePermiso = tienePermiso,
         userLocation = userLocation,
+        mostrarBuscarEnZona = camaraFueraDeZona,
+        onBuscarEnZona = {
+            val target = cameraPositionState.position.target
+            viewModel.establecerCentroZona(target.latitude, target.longitude)
+            camaraFueraDeZona = false
+        },
+        onZonaBuscada = { latLng ->
+            viewModel.establecerCentroZona(latLng.latitude, latLng.longitude)
+            camaraFueraDeZona = false
+        },
         onSelectCategory = { viewModel.seleccionarCategoria(it) },
         onSelectIncident = { viewModel.seleccionarIncidencia(it) },
         onSigueAhi = { viewModel.marcarSigueAhi(it) },
@@ -238,6 +273,9 @@ fun MapScreenContent(
     mensajeUi: SharedFlow<String>? = null,
     tienePermiso: Boolean,
     userLocation: LatLng? = null,
+    mostrarBuscarEnZona: Boolean = false,
+    onBuscarEnZona: () -> Unit = {},
+    onZonaBuscada: (LatLng) -> Unit = {},
     onSelectCategory: (String) -> Unit,
     onSelectIncident: (Incidencia?) -> Unit,
     onSigueAhi: (String) -> Unit,
@@ -543,6 +581,7 @@ fun MapScreenContent(
                                                     cameraPositionState.animate(
                                                         CameraUpdateFactory.newLatLngZoom(latLng, 15f)
                                                     )
+                                                    onZonaBuscada(latLng)
                                                 }.onFailure { err ->
                                                     val mensaje = if (err is NoSuchElementException) {
                                                         "No se encontraron resultados para \"$query\""
@@ -634,6 +673,39 @@ fun MapScreenContent(
                                 selectedContainerColor = Color(cat.colorHex),
                                 selectedLabelColor = Color.Black
                             )
+                        )
+                    }
+                }
+            }
+
+            if (isMapView && mostrarBuscarEnZona) {
+                Surface(
+                    onClick = onBuscarEnZona,
+                    shape = CircleShape,
+                    color = PrimaryDark,
+                    contentColor = Color.White,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 118.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Buscar en esta zona",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }
