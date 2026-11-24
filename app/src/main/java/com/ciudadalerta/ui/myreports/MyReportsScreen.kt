@@ -24,6 +24,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.ciudadalerta.data.model.EstadoIncidencia
 import com.ciudadalerta.data.util.TimeUtils
+import com.ciudadalerta.ui.components.EstadoCargando
+import com.ciudadalerta.ui.components.EstadoVacio
 import com.ciudadalerta.ui.theme.*
 
 import androidx.compose.ui.tooling.preview.Preview
@@ -141,33 +143,16 @@ fun MyReportsContent(
             }
 
             if (cargando && misReportesList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                EstadoCargando(mensaje = "Cargando tus reportes…", modifier = Modifier.weight(1f))
             } else if (misReportesList.isEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceContainerLowest,
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.AssignmentLate, contentDescription = null, tint = OutlineColor, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Aún no has creado ni apoyado reportes", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text("Tus reportes y confirmaciones aparecerán aquí en tiempo real.", color = OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = onNewReport, colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)) {
-                            Icon(Icons.Default.AddLocationAlt, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Crear primer reporte")
-                        }
-                    }
-                }
+                EstadoVacio(
+                    icono = Icons.Default.AssignmentLate,
+                    titulo = "Aún no has creado reportes",
+                    mensaje = "Tus reportes y confirmaciones aparecerán aquí en tiempo real.",
+                    accionText = "Crear primer reporte",
+                    onAccion = onNewReport,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),

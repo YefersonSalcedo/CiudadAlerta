@@ -201,6 +201,11 @@ class IncidenciasRepository(
         return snap.toObject(Incidencia::class.java)
     }
 
+    suspend fun obtenerTodasLasIncidencias(): List<Incidencia> {
+        val snap = incidenciasCol.get().await()
+        return snap.toObjects(Incidencia::class.java)
+    }
+
     fun observarIncidenciasPorUsuario(usuarioId: String): Flow<List<Incidencia>> = callbackFlow {
         val listener = incidenciasCol
             .whereArrayContains("reportantesIds", usuarioId)

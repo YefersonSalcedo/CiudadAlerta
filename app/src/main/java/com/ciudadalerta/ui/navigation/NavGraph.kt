@@ -14,12 +14,14 @@ import com.ciudadalerta.ui.detail.IncidentDetailScreen
 import com.ciudadalerta.ui.map.MapScreen
 import com.ciudadalerta.ui.myreports.MyReportsScreen
 import com.ciudadalerta.ui.notifications.NotificationsScreen
+import com.ciudadalerta.ui.profile.FollowedIncidentsScreen
 import com.ciudadalerta.ui.profile.ProfileScreen
 import com.ciudadalerta.ui.report.CreateReportScreen
 import com.ciudadalerta.ui.report.DuplicateDetectionScreen
 import com.ciudadalerta.ui.report.GeminiAnalysisScreen
 import com.ciudadalerta.ui.report.ReportConfirmationScreen
 import com.ciudadalerta.ui.report.ReportViewModel
+import com.ciudadalerta.ui.stats.StatsScreen
 import com.google.firebase.auth.FirebaseAuth
 
 sealed class Screen(val route: String) {
@@ -37,6 +39,8 @@ sealed class Screen(val route: String) {
     object MyReports : Screen("my_reports")
     object Notifications : Screen("notifications")
     object Profile : Screen("profile")
+    object Stats : Screen("stats")
+    object FollowedIncidents : Screen("followed_incidents")
 }
 
 @Composable
@@ -145,11 +149,22 @@ fun CiudadAlertaNavGraph(
                 onNavigateToMap = { navController.navigateTab(Screen.Map.route) },
                 onNavigateToMyReports = { navController.navigateTab(Screen.MyReports.route) },
                 onNavigateToNotifications = { navController.navigateTab(Screen.Notifications.route) },
+                onNavigateToStats = { navController.navigate(Screen.Stats.route) },
+                onNavigateToFollowed = { navController.navigate(Screen.FollowedIncidents.route) },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+        composable(Screen.Stats.route) {
+            StatsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.FollowedIncidents.route) {
+            FollowedIncidentsScreen(
+                onBack = { navController.popBackStack() },
+                onSelectIncident = { id -> navController.navigate(Screen.IncidentDetail.createRoute(id)) }
             )
         }
     }
