@@ -16,6 +16,7 @@
  *   $env:MI_UID="..."; $env:MI_NOMBRE="Yeferson"; $env:STORAGE_BUCKET="tu-proyecto.firebasestorage.app"
  *
  * Uso:
+ *   $env:MI_ZONA="Tarazá"           # (opcional) municipio donde quedan tus incidencias "mías"
  *   node seed.js --dry            # no escribe nada: muestra qué generaría (añade --ids para listar cada incidencia)
  *   --omitir-sin-fotos            # no genera incidencias de categorías cuya carpeta de fotos esté vacía
  *   node seed.js                  # carga 60 incidencias (cambia con --n=100)
@@ -39,7 +40,7 @@ const arg = (n, d) => {
 const N = 3;            // marcas para resolver
 const M = 3;            // denuncias para ocultar
 const X_HORAS = 48;     // re-verificación
-const DIAS_VISIBLE = 3; // días visibles de una resuelta
+const DIAS_VISIBLE = 4; // días visibles de una resuelta (DIAS_VISIBILIDAD_RESUELTA)
 const MIN_DESTACADA = 3;
 // ----------------------------------------
 
@@ -102,16 +103,49 @@ const CATEGORIAS = [
 const COMENT = ["Sigue igual esta mañana.", "Pasé por aquí ayer y continúa el problema.", "Ya hay varios vecinos reportándolo.", "Ojalá lo arreglen pronto, es peligroso.", "Confirmo, sigue ahí.", "Hoy empeoró con la lluvia.", "Llevo semanas viéndolo así.", "Gracias por reportarlo."];
 const REPORTE_TXT = ["Yo también vi este problema.", "Sigue sin arreglarse.", "Confirmo el reporte, es peligroso.", "Lo vi esta mañana, continúa igual."];
 
+// Solo casco urbano. Cada zona tiene "sectores" (centro + radio en grados; 0.001° ≈ 110 m).
+// "peso" reparte las incidencias entre municipios y sectores (NO es simétrico a propósito).
+// "sesgo" multiplica el peso de cada categoría en ese municipio (1 = normal, >1 más frecuente, <1 menos).
+// Coordenadas aproximadas: verifícalas con `node seed.js --dry --ids` (imprime un enlace a Google Maps por incidencia).
 const ZONAS = [
-  { ciudad: "Tarazá", depto: "Antioquia", lat: 7.5778, lng: -75.4044, radio: 0.011, peso: 0.5 },
-  { ciudad: "Medellín", depto: "Antioquia", lat: 6.2442, lng: -75.5812, radio: 0.035, peso: 0.33 },
-  { ciudad: "Caucasia", depto: "Antioquia", lat: 7.9847, lng: -75.1981, radio: 0.013, peso: 0.17 },
+  { ciudad: "Tarazá", depto: "Antioquia", peso: 0.34,
+    sesgo: { vias: 1.9, animales: 1.6, residuos: 1.2, arboles: 0.7, semaforos: 0.4 },
+    sectores: [
+      { nombre: "Centro", lat: 7.5881, lng: -75.4028, r: 0.0040, peso: 3 },
+      { nombre: "Sur", lat: 7.5778, lng: -75.4044, r: 0.0035, peso: 2 },
+    ] },
+  { ciudad: "El Retiro", depto: "Antioquia", peso: 0.24,
+    sesgo: { parques: 2.0, arboles: 2.0, animales: 1.2, residuos: 0.7, semaforos: 0.3 },
+    sectores: [
+      { nombre: "Centro", lat: 6.0600, lng: -75.5035, r: 0.0035, peso: 1 },
+    ] },
+  { ciudad: "Medellín", depto: "Antioquia", peso: 0.42,
+    sesgo: { semaforos: 2.0, alumbrado: 1.3, residuos: 1.3, otros: 1.4, animales: 0.5 },
+    sectores: [
+      { nombre: "Laureles", lat: 6.2447, lng: -75.5905, r: 0.0035, peso: 3 },
+      { nombre: "Centro", lat: 6.2518, lng: -75.5636, r: 0.0030, peso: 3 },
+      { nombre: "Belén", lat: 6.2336, lng: -75.6003, r: 0.0035, peso: 2 },
+      { nombre: "El Poblado", lat: 6.2086, lng: -75.5659, r: 0.0030, peso: 2 },
+      { nombre: "Castilla", lat: 6.2915, lng: -75.5710, r: 0.0030, peso: 1 },
+      { nombre: "Robledo", lat: 6.2745, lng: -75.5945, r: 0.0030, peso: 1 },
+    ] },
 ];
+const ZONA_MIA = process.env.MI_ZONA || "Tarazá"; // municipio donde viven las incidencias "mías" (Mis reportes / seguidas)
 const TIPOS_VIA = ["Cra.", "Cl.", "Av.", "Dg."];
 const direccion = (z) => `${pick(TIPOS_VIA)} ${int(10, 80)} # ${int(10, 70)}-${int(1, 99)}, ${z.ciudad}, ${z.depto}, Colombia`;
 
-// Escenarios para cubrir todos los casos de la app
-const ESCENARIOS = ["nueva", "normal", "destacada", "normal", "h48", "casiResuelta", "resuelta", "destacada", "casiOculta", "normal", "vencida", "oculta"];
+// Frecuencia base por categoría (asimétrica) y por escenario
+const PESO_CAT = { vias: 26, residuos: 20, alumbrado: 15, semaforos: 9, parques: 8, arboles: 7, animales: 6, otros: 5 };
+const pickW = (items, w) => {
+  const tot = items.reduce((a, x) => a + w(x), 0);
+  let r = rnd() * tot;
+  for (const x of items) { r -= w(x); if (r < 0) return x; }
+  return items[items.length - 1];
+};
+
+// Escenarios para cubrir todos los casos de la app (pesos: la mayoría son incidencias normales)
+const PESO_ESC = { nueva: 9, normal: 38, destacada: 12, h48: 8, casiResuelta: 7, resuelta: 9, vencida: 4, casiOculta: 5, oculta: 4 };
+const ESCENARIOS = Object.keys(PESO_ESC);
 
 function fotosDe(key) {
   const dir = path.join(__dirname, "fotos", key);
@@ -125,16 +159,19 @@ function generar() {
   // --omitir-sin-fotos: no genera incidencias de las categorías cuya carpeta de fotos está vacía
   const cats = flag("omitir-sin-fotos") ? CATEGORIAS.filter((c) => pool[c.key].length > 0) : CATEGORIAS;
   if (!cats.length) throw new Error("No hay fotos en ninguna carpeta de seed/fotos/");
-  const cuposZona = ZONAS.map((z) => Math.round(TOTAL * z.peso));
+  const cuposZona = ZONAS.map((z) => Math.floor(TOTAL * z.peso));
+  cuposZona[cuposZona.length - 1] += TOTAL - cuposZona.reduce((a, b) => a + b, 0); // el resto va al último municipio
   let idx = 0;
 
   ZONAS.forEach((z, zi) => {
     for (let k = 0; k < cuposZona[zi]; k++, idx++) {
-      const cat = cats[(idx + Math.floor(idx / ESCENARIOS.length)) % cats.length];
-      const esc = ESCENARIOS[idx % ESCENARIOS.length];
+      const cat = pickW(cats, (c) => (PESO_CAT[c.key] || 5) * ((z.sesgo || {})[c.key] || 1));
+      const esc = pickW(ESCENARIOS, (e) => PESO_ESC[e]);
       const id = `demo-${String(idx + 1).padStart(3, "0")}-${cat.key}`;
-      const lat = z.lat + (rnd() - 0.5) * 2 * z.radio;
-      const lng = z.lng + (rnd() - 0.5) * 2 * z.radio;
+      const sec = pickW(z.sectores, (x) => x.peso);
+      const ang = rnd() * 2 * Math.PI, rad = sec.r * Math.sqrt(rnd());
+      const lat = sec.lat + rad * Math.sin(ang);
+      const lng = sec.lng + (rad * Math.cos(ang)) / Math.cos((sec.lat * Math.PI) / 180);
       const fotos = pool[cat.key];
       const fotoLocal = fotos.length ? fotos[(idx * 7 + k) % fotos.length] : null;
 
@@ -149,12 +186,13 @@ function generar() {
       if (esc === "casiOculta") { nDen = M - 1; creada = horas(int(10, 60)); }
       if (esc === "oculta") { nDen = M; oculto = true; creada = horas(int(10, 80)); }
 
-      // En Tarazá, parte de las incidencias son "mías" para probar Mis reportes
-      const mia = ME && zi === 0 && idx % 4 === 0;
+      // En el municipio ZONA_MIA (por defecto Tarazá), parte de las incidencias son "mías" para probar Mis reportes
+      const esMiZona = z.ciudad === ZONA_MIA;
+      const mia = ME && esMiZona && k % 4 === 0;
       const otros = shuffle(usuarios.map((u) => u.id));
       const reportantes = mia ? [ME, ...otros.slice(0, nReport - 1)] : otros.slice(0, nReport);
       const seguidores = [];
-      if (ME && !mia && zi === 0 && (esc === "destacada" || idx % 5 === 1)) seguidores.push(ME);
+      if (ME && !mia && esMiZona && (esc === "destacada" || idx % 5 === 1)) seguidores.push(ME);
       if (rnd() < 0.3) seguidores.push(otros[nReport % otros.length]);
 
       const iTexto = int(0, cat.titulos.length - 1);
@@ -162,7 +200,7 @@ function generar() {
       const verificada = esc === "h48" ? creada : Math.max(creada, horas(int(1, 20)));
       const seguida = !!(ME && seguidores.includes(ME));
       incidencias.push({
-        id, fotoLocal, meta: { esc, ciudad: z.ciudad, mia: !!mia, seguida, nRep: reportantes.length }, data: {
+        id, fotoLocal, meta: { esc, cat: cat.key, ciudad: z.ciudad, sector: sec.nombre, lat, lng, mia: !!mia, seguida, nRep: reportantes.length }, data: {
           titulo: cat.titulos[iTexto],
           categoria: cat.nombre,
           ubicacion: { latitud: lat, longitud: lng, direccionAproximada: dir, geohash: ngeohash.encode(lat, lng, 9) },
@@ -279,10 +317,15 @@ async function limpiarTodo() {
   }
   // Alertas de todos los usuarios (los perfiles NO se borran, para no perder fcmToken ni sesiones)
   const bw = db.bulkWriter();
-  const alertas = await db.collectionGroup("notificaciones").get();
-  alertas.forEach((d) => bw.delete(d.ref));
+  // (se revisan ambos nombres porque README usa "notificaciones" y ARQUITECTURA "alertas")
+  let nAlertas = 0;
+  for (const sub of ["alertas", "notificaciones"]) {
+    const snap = await db.collectionGroup(sub).get();
+    snap.forEach((d) => bw.delete(d.ref));
+    nAlertas += snap.size;
+  }
   await bw.close();
-  console.log(`  ${alertas.size} alertas eliminadas`);
+  console.log(`  ${nAlertas} alertas eliminadas`);
   const demo = await db.collection("usuarios").where(FieldPath.documentId(), ">=", "demo-").where(FieldPath.documentId(), "<", "demo-\uf8ff").get();
   const bw2 = db.bulkWriter();
   demo.forEach((d) => bw2.delete(d.ref));
@@ -296,12 +339,15 @@ async function limpiarTodo() {
   if (flag("dry")) {
     const plan = generar();
     const porEsc = {};
-    plan.incidencias.forEach((i, n) => { const e = ESCENARIOS[n % ESCENARIOS.length]; porEsc[e] = (porEsc[e] || 0) + 1; });
+    plan.incidencias.forEach((i) => { const e = i.meta.esc; porEsc[e] = (porEsc[e] || 0) + 1; });
     console.log(`Incidencias: ${plan.incidencias.length} | reportes: ${plan.reportes.length} | comentarios: ${plan.comentarios.length} | marcas: ${plan.marcas.length} | denuncias: ${plan.denuncias.length}`);
-    console.log("Escenarios (aprox.):", porEsc);
+    console.log("Escenarios:", porEsc);
+    const tabla = {};
+    plan.incidencias.forEach((i) => { tabla[i.meta.ciudad] = tabla[i.meta.ciudad] || { total: 0 }; tabla[i.meta.ciudad][i.meta.cat] = (tabla[i.meta.ciudad][i.meta.cat] || 0) + 1; tabla[i.meta.ciudad].total++; });
+    console.log("Por municipio y categoría:"); console.table(tabla);
     if (flag("ids")) {
-      console.log("\nID | zona | escenario | reportes | mía | la sigues");
-      plan.incidencias.forEach((i) => console.log(`${i.id} | ${i.meta.ciudad} | ${i.meta.esc} | ${i.meta.nRep} | ${i.meta.mia ? "sí" : "-"} | ${i.meta.seguida ? "sí" : "-"}`));
+      console.log("\nID | zona | sector | escenario | reportes | mía | la sigues | mapa");
+      plan.incidencias.forEach((i) => console.log(`${i.id} | ${i.meta.ciudad} | ${i.meta.sector} | ${i.meta.esc} | ${i.meta.nRep} | ${i.meta.mia ? "sí" : "-"} | ${i.meta.seguida ? "sí" : "-"} | https://www.google.com/maps?q=${i.meta.lat.toFixed(6)},${i.meta.lng.toFixed(6)}`));
     }
     console.log("Fotos encontradas por categoría:", Object.fromEntries(Object.entries(plan.pool).map(([k, v]) => [k, v.length])));
     return;

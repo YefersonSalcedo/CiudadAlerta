@@ -416,39 +416,62 @@ fun IncidentDetailContent(
                                     color = OnSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
+                                val esSigueAhiSeleccionado = uiState.tipoVoto == TipoVoto.SIGUE_AHI
+                                val esResueltoSeleccionado = uiState.tipoVoto == TipoVoto.RESUELTO
+
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(
                                         onClick = onSigueAhi,
-                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark),
+                                        enabled = !uiState.yaVoto,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = PrimaryDark,
+                                            contentColor = OnPrimary,
+                                            disabledContainerColor = if (esSigueAhiSeleccionado) PrimaryDark else SurfaceContainerHigh,
+                                            disabledContentColor = if (esSigueAhiSeleccionado) OnPrimary else OnSurfaceVariant.copy(alpha = 0.38f)
+                                        ),
                                         shape = RoundedCornerShape(14.dp),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                                         modifier = Modifier
                                             .weight(1f)
                                             .heightIn(min = 48.dp)
                                     ) {
-                                        Icon(Icons.Default.ThumbUp, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            imageVector = if (esSigueAhiSeleccionado) Icons.Default.Check else Icons.Default.ThumbUp,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             text = "Sigue ahí",
-                                            fontSize = 12.sp,
+                                            fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1
                                         )
                                     }
                                     Button(
                                         onClick = onResuelto,
-                                        colors = ButtonDefaults.buttonColors(containerColor = TertiaryContainer, contentColor = OnTertiaryContainer),
+                                        enabled = !uiState.yaVoto,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = TertiaryContainer,
+                                            contentColor = OnTertiaryContainer,
+                                            disabledContainerColor = if (esResueltoSeleccionado) TertiaryContainer else SurfaceContainerHigh,
+                                            disabledContentColor = if (esResueltoSeleccionado) OnTertiaryContainer else OnSurfaceVariant.copy(alpha = 0.38f)
+                                        ),
                                         shape = RoundedCornerShape(14.dp),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                                         modifier = Modifier
                                             .weight(1f)
                                             .heightIn(min = 48.dp)
                                     ) {
-                                        Icon(Icons.Default.TaskAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            imageVector = if (esResueltoSeleccionado) Icons.Default.Check else Icons.Default.TaskAlt,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Ya se solucionó",
-                                            fontSize = 12.sp,
+                                            text = if (esResueltoSeleccionado) "Solucionado" else "Ya se solucionó",
+                                            fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1
                                         )
@@ -483,10 +506,18 @@ fun IncidentDetailContent(
                     }
 
                     // 6. REPORTES DEL GRUPO
+                    val totalReportes = if (inc.contadorReportes > 0) {
+                        inc.contadorReportes
+                    } else if (inc.reportantesIds.isNotEmpty()) {
+                        inc.reportantesIds.size
+                    } else {
+                        uiState.reportes.size
+                    }
+
                     item {
                         HorizontalDivider()
                         Text(
-                            "Reportes del grupo (${uiState.reportes.size})",
+                            "Reportes del grupo ($totalReportes)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

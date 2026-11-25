@@ -112,11 +112,18 @@ class MapViewModel(
         _incidenciaSeleccionadaId.value = incidencia?.id
     }
 
+    fun yaMarcoSigueAhi(incidenciaId: String): Boolean {
+        val uid = auth.currentUser?.uid ?: ""
+        return incidenciaId in _incidenciasConfirmadas.value ||
+                (uid.isNotBlank() && incidenciasRepository.yaMarcoSigueAhi(incidenciaId, uid))
+    }
+
     fun marcarSigueAhi(incidenciaId: String) {
-        if (incidenciaId in _incidenciasConfirmadas.value) return
+        val uid = auth.currentUser?.uid ?: ""
+        if (yaMarcoSigueAhi(incidenciaId)) return
         viewModelScope.launch {
             try {
-                incidenciasRepository.marcarSigueAhi(incidenciaId)
+                incidenciasRepository.marcarSigueAhi(incidenciaId, uid)
                 _incidenciasConfirmadas.update { it + incidenciaId }
                 _mensajeUi.tryEmit("Confirmaste que la incidencia sigue ahí")
             } catch (_: Exception) {

@@ -29,21 +29,36 @@ class IncidentDetailViewModel(
     private val _uiState = MutableStateFlow(IncidentDetailUiState())
     val uiState: StateFlow<IncidentDetailUiState> = _uiState.asStateFlow()
 
+    private var incidenciaJob: Job? = null
     private var comentariosJob: Job? = null
     private var reportesJob: Job? = null
 
     val currentUserId: String? get() = auth.currentUser?.uid
 
     fun cargarIncidencia(incidenciaId: String) {
+        incidenciaJob?.cancel()
         comentariosJob?.cancel()
         reportesJob?.cancel()
 
         _uiState.update { it.copy(cargando = true, mensajeError = null) }
 
-        viewModelScope.launch {
-            try {
-                val item = incidenciasRepository.obtenerIncidenciaPorId(incidenciaId)
-                val uid = currentUserId
+        val uid = currentUserId
+        if (!uid.isNullOrBlank()) {
+            viewModelScope.launch {
+                try {
+                    val yaMarcoResuelto = incidenciasRepository.yaMarcoResuelto(incidenciaId, uid)
+                    val yaMarcoSigueAhi = incidenciasRepository.yaMarcoSigueAhi(incidenciaId, uid)
+                    if (yaMarcoResuelto) {
+                        _uiState.update { it.copy(yaVoto = true, tipoVoto = TipoVoto.RESUELTO) }
+                    } else if (yaMarcoSigueAhi) {
+                        _uiState.update { it.copy(yaVoto = true, tipoVoto = TipoVoto.SIGUE_AHI) }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        incidenciaJob = incidenciasRepository.observarIncidenciaPorId(incidenciaId)
+            .onEach { item ->
                 val esPropio = if (!uid.isNullOrBlank() && item != null) {
                     item.reportantesIds.contains(uid)
                 } else false
@@ -60,7 +75,8 @@ class IncidentDetailViewModel(
                         cargando = false
                     )
                 }
-            } catch (e: Exception) {
+            }
+            .catch { e ->
                 Log.e("IncidentDetailVM", "Error al cargar la incidencia: ${e.message}", e)
                 _uiState.update {
                     it.copy(
@@ -69,7 +85,7 @@ class IncidentDetailViewModel(
                     )
                 }
             }
-        }
+            .launchIn(viewModelScope)
 
         comentariosJob = comentariosRepository.observarComentarios(incidenciaId)
             .onEach { lista ->
@@ -138,31 +154,31 @@ class IncidentDetailViewModel(
     }
 
     fun marcarSigueAhi(incidenciaId: String) {
+        if (_uiState.value.yaVoto) return
+        val uid = currentUserId ?: ""
+        _uiState.update { it.copy(yaVoto = true, tipoVoto = TipoVoto.SIGUE_AHI) }
         viewModelScope.launch {
             try {
-                incidenciasRepository.marcarSigueAhi(incidenciaId)
-                _uiState.update { it.copy(yaVoto = true) }
-                cargarIncidencia(incidenciaId)
+                incidenciasRepository.marcarSigueAhi(incidenciaId, uid)
             } catch (e: Exception) {
                 Log.e("IncidentDetailVM", "Error en marcarSigueAhi: ${e.message}", e)
-                _uiState.update { it.copy(mensajeError = e.message ?: "Error al confirmar la presencia") }
+                _uiState.update { it.copy(yaVoto = false, tipoVoto = TipoVoto.NINGUNO, mensajeError = e.message ?: "Error al confirmar la presencia") }
             }
         }
     }
 
     fun marcarResuelto(incidenciaId: String, usuarioId: String) {
+        if (_uiState.value.yaVoto) return
+        _uiState.update { it.copy(yaVoto = true, tipoVoto = TipoVoto.RESUELTO) }
         viewModelScope.launch {
             try {
                 val exito = incidenciasRepository.marcarResuelto(incidenciaId, usuarioId)
-                if (exito) {
-                    _uiState.update { it.copy(yaVoto = true) }
-                    cargarIncidencia(incidenciaId)
-                } else {
+                if (!exito) {
                     _uiState.update { it.copy(mensajeError = "Ya habías registrado una marca de resuelto") }
                 }
             } catch (e: Exception) {
                 Log.e("IncidentDetailVM", "Error en marcarResuelto: ${e.message}", e)
-                _uiState.update { it.copy(mensajeError = e.message ?: "Error al marcar como resuelto") }
+                _uiState.update { it.copy(yaVoto = false, tipoVoto = TipoVoto.NINGUNO, mensajeError = e.message ?: "Error al marcar como resuelto") }
             }
         }
     }

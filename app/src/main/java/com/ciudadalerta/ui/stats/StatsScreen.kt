@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -17,14 +18,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ciudadalerta.data.util.obtenerUbicacionActual
 import com.ciudadalerta.ui.theme.*
-
-import androidx.compose.ui.tooling.preview.Preview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +35,16 @@ fun StatsScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val loc = try { obtenerUbicacionActual(context) } catch (_: Exception) { null }
+        if (loc != null) {
+            viewModel.cargarEstadisticas(loc.latitude, loc.longitude)
+        } else {
+            viewModel.cargarEstadisticas(7.5778, -75.4044)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -149,7 +161,10 @@ fun StatsScreen(
                 }
 
                 is StatsUiState.Success -> {
-                    StatsContent(stats = state.stats)
+                    StatsContent(
+                        state = state,
+                        onFiltroChanged = { soloCiudad -> viewModel.setFiltroSoloCiudad(soloCiudad) }
+                    )
                 }
             }
         }
@@ -157,7 +172,12 @@ fun StatsScreen(
 }
 
 @Composable
-private fun StatsContent(stats: IncidenciasStats) {
+private fun StatsContent(
+    state: StatsUiState.Success,
+    onFiltroChanged: (Boolean) -> Unit
+) {
+    val stats = if (state.filtroSoloCiudad) state.statsCiudad else state.statsGlobal
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -165,8 +185,33 @@ private fun StatsContent(stats: IncidenciasStats) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = state.filtroSoloCiudad,
+                onClick = { onFiltroChanged(true) },
+                label = { Text("En ${state.statsCiudad.ciudadNombre}") },
+                leadingIcon = if (state.filtroSoloCiudad) {
+                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                } else null
+            )
+            FilterChip(
+                selected = !state.filtroSoloCiudad,
+                onClick = { onFiltroChanged(false) },
+                label = { Text("Todas las zonas") },
+                leadingIcon = if (!state.filtroSoloCiudad) {
+                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                } else null
+            )
+        }
+
         Text(
-            text = "Resumen de actividad e incidencias en tu ciudad",
+            text = if (state.filtroSoloCiudad)
+                "Resumen de actividad e incidencias en ${stats.ciudadNombre}"
+            else
+                "Resumen de actividad e incidencias a nivel general",
             style = MaterialTheme.typography.bodyMedium,
             color = OnSurfaceVariant
         )
@@ -375,15 +420,21 @@ private fun TarjetaMetrica(
 @Preview(showBackground = true)
 @Composable
 fun StatsScreenPreview() {
+    val sample = IncidenciasStats(
+        totalActivas = 12,
+        totalResueltas = 8,
+        tiempoPromedioResolucionTexto = "2.5 días",
+        categoriaMasReportada = "Vías",
+        conteoPorCategoria = emptyList(),
+        ciudadNombre = "Tarazá"
+    )
     CiudadAlertaTheme {
         StatsContent(
-            stats = IncidenciasStats(
-                totalActivas = 12,
-                totalResueltas = 8,
-                tiempoPromedioResolucionTexto = "2.5 días",
-                categoriaMasReportada = "Vías",
-                conteoPorCategoria = emptyList()
-            )
+            state = StatsUiState.Success(
+                statsCiudad = sample,
+                statsGlobal = sample
+            ),
+            onFiltroChanged = {}
         )
     }
 }

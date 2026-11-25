@@ -6,7 +6,6 @@ import com.ciudadalerta.data.model.*
 import com.ciudadalerta.data.util.GeoUtils
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -130,7 +129,49 @@ class IncidenciasRepository(
         return true
     }
 
-    suspend fun marcarSigueAhi(incidenciaId: String) {
+    companion object {
+        private val confirmacionesCache = mutableSetOf<String>()
+    }
+
+    suspend fun yaMarcoResuelto(incidenciaId: String, usuarioId: String): Boolean {
+        if (usuarioId.isBlank()) return false
+        val marcaId = "${usuarioId}_${incidenciaId}"
+        return marcasResueltoCol.document(marcaId).get().await().exists()
+    }
+
+    fun yaMarcoSigueAhi(incidenciaId: String, usuarioId: String): Boolean {
+        if (usuarioId.isBlank()) return false
+        val key = "${usuarioId}_${incidenciaId}"
+        if (confirmacionesCache.contains(key)) return true
+        val fueGuardado = obtenerPrefs()?.getBoolean(key, false) ?: false
+        if (fueGuardado) confirmacionesCache.add(key)
+        return fueGuardado
+    }
+
+    private fun guardarConfirmacionEnPrefs(usuarioId: String, incidenciaId: String) {
+        try {
+            val key = "${usuarioId}_${incidenciaId}"
+            obtenerPrefs()?.edit()?.putBoolean(key, true)?.apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun obtenerPrefs(): android.content.SharedPreferences? {
+        return try {
+            val appClass = Class.forName("android.app.ActivityThread")
+            val currentAppMethod = appClass.getMethod("currentApplication")
+            val app = currentAppMethod.invoke(null) as? android.content.Context
+            app?.getSharedPreferences("ciudad_alerta_votos", android.content.Context.MODE_PRIVATE)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun marcarSigueAhi(incidenciaId: String, usuarioId: String = "") {
+        if (usuarioId.isNotBlank()) {
+            val key = "${usuarioId}_${incidenciaId}"
+            confirmacionesCache.add(key)
+            guardarConfirmacionEnPrefs(usuarioId, incidenciaId)
+        }
         val incRef = incidenciasCol.document(incidenciaId)
 
         firestore.runTransaction { transaction ->
@@ -182,16 +223,29 @@ class IncidenciasRepository(
         return true
     }
 
+    fun observarIncidenciaPorId(incidenciaId: String): Flow<Incidencia?> = callbackFlow {
+        val listener = incidenciasCol.document(incidenciaId)
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                trySend(snap?.toObject(Incidencia::class.java))
+            }
+        awaitClose { listener.remove() }
+    }
+
     fun observarReportes(incidenciaId: String): Flow<List<Reporte>> = callbackFlow {
         val listener = reportesCol
             .whereEqualTo("incidenciaId", incidenciaId)
-            .orderBy("fecha", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                trySend(snap?.toObjects(Reporte::class.java) ?: emptyList())
+                val lista = snap?.toObjects(Reporte::class.java)
+                    ?.sortedByDescending { it.fecha } ?: emptyList()
+                trySend(lista)
             }
         awaitClose { listener.remove() }
     }

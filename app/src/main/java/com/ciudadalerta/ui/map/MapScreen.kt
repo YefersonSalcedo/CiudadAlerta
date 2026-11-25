@@ -821,9 +821,12 @@ fun MapScreenContent(
                 AnimatedVisibility(visible = isMapView && selectedIncident != null) {
                     selectedIncident?.let { inc ->
                         key(inc.id) {
+                            val repo = remember { com.ciudadalerta.data.repository.IncidenciasRepository() }
+                            val authUser = remember { try { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser } catch (_: Exception) { null } }
+                            val yaConfirmada = inc.id in confirmadasIds || (authUser?.uid != null && repo.yaMarcoSigueAhi(inc.id, authUser.uid))
                             TarjetaIncidenciaMapa(
                                 incidencia = inc,
-                                yaConfirmada = inc.id in confirmadasIds,
+                                yaConfirmada = yaConfirmada,
                                 onCerrar = { onSelectIncident(null) },
                                 onSigueAhi = { onSigueAhi(inc.id) },
                                 onVerDetalle = { onNavigateToDetail(inc.id) }
@@ -1012,25 +1015,53 @@ private fun TarjetaIncidenciaMapa(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
-                    onClick = onSigueAhi,
-                    enabled = !yaConfirmada && !resuelta,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (yaConfirmada) "Confirmado" else "Sigue ahí",
-                        maxLines = 1
-                    )
+                if (yaConfirmada) {
+                    Button(
+                        onClick = {},
+                        enabled = false,
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = PrimaryDark,
+                            disabledContentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Confirmado",
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onSigueAhi,
+                        enabled = !resuelta,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ThumbUp,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Sigue ahí",
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 Button(
