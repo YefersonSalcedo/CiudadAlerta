@@ -7,9 +7,13 @@ import androidx.lifecycle.viewModelScope
 import com.ciudadalerta.data.model.Usuario
 import com.ciudadalerta.data.repository.AuthRepository
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 sealed interface AuthUiState {
@@ -32,15 +36,29 @@ class AuthViewModel(
         if (currentUser != null) cargarPerfil()
     }
 
+    private var perfilJob: Job? = null
+
     fun cargarPerfil() {
+        val uid = currentUser?.uid ?: return
+        perfilJob?.cancel()
+        _uiState.value = AuthUiState.Loading
         viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
             try {
-                val usuario = authRepository.crearOActualizarPerfilCiudadano()
-                _uiState.value = AuthUiState.Success(usuario)
-            } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(e.message ?: "Error al cargar perfil")
-            }
+                authRepository.crearOActualizarPerfilCiudadano()
+            } catch (_: Exception) {}
+
+            perfilJob = authRepository.observarPerfil(uid)
+                .onEach { usuario ->
+                    if (usuario != null) {
+                        _uiState.value = AuthUiState.Success(usuario)
+                    } else {
+                        _uiState.value = AuthUiState.Error("No se pudo cargar el perfil")
+                    }
+                }
+                .catch { e ->
+                    _uiState.value = AuthUiState.Error(e.message ?: "Error al cargar perfil")
+                }
+                .launchIn(viewModelScope)
         }
     }
 
@@ -49,9 +67,9 @@ class AuthViewModel(
             _uiState.value = AuthUiState.Loading
             try {
                 authRepository.iniciarConGoogle(context, webClientId)
-                val usuario = authRepository.crearOActualizarPerfilCiudadano()
-                _uiState.value = AuthUiState.Success(usuario)
+                authRepository.crearOActualizarPerfilCiudadano()
                 onSuccess()
+                cargarPerfil()
             } catch (e: GetCredentialCancellationException) {
                 _uiState.value = AuthUiState.Idle // el usuario cerró el selector
             } catch (e: Exception) {

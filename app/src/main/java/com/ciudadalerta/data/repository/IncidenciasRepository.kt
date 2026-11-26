@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.ciudadalerta.data.config.CiudadAlertaConfig
 import com.ciudadalerta.data.model.*
 import com.ciudadalerta.data.util.GeoUtils
+import com.ciudadalerta.data.util.calcularNuevosPuntos
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -80,6 +81,9 @@ class IncidenciasRepository(
         }
 
         val docRef = incidenciasCol.document()
+        val reporteRef = reportesCol.document()
+        val userRef = firestore.collection("usuarios").document(reporteInicial.usuarioId)
+
         val incidenciaCompleta = incidencia.copy(
             id = docRef.id,
             ubicacion = incidencia.ubicacion.copy(
@@ -88,45 +92,104 @@ class IncidenciasRepository(
             reportantesIds = listOf(reporteInicial.usuarioId),
             descripcion = reporteInicial.descripcion
         )
-        docRef.set(incidenciaCompleta).await()
-        reportesCol.document().set(reporteInicial.copy(incidenciaId = docRef.id)).await()
+
+        firestore.runTransaction { tx ->
+            // Reads first
+            val userSnap = tx.get(userRef)
+            val puntosResult = calcularNuevosPuntos(userSnap, CiudadAlertaConfig.PUNTOS_CREAR_INCIDENCIA, esInteraccion = false)
+
+            // Writes after all reads
+            tx.set(docRef, incidenciaCompleta)
+            tx.set(reporteRef, reporteInicial.copy(incidenciaId = docRef.id))
+            if (puntosResult != null) {
+                tx.update(
+                    userRef,
+                    mapOf(
+                        "puntosCivicos" to puntosResult.puntosCivicos,
+                        "nivel" to puntosResult.nivel,
+                        "puntosInteraccionHoy" to puntosResult.puntosInteraccionHoy,
+                        "fechaUltimaInteraccion" to puntosResult.fechaUltimaInteraccion
+                    )
+                )
+            }
+        }.await()
+
         return docRef.id
     }
 
     suspend fun unirReporteAIncidencia(incidenciaId: String, reporte: Reporte) {
         val incRef = incidenciasCol.document(incidenciaId)
+        val reporteRef = reportesCol.document()
+        val userRef = firestore.collection("usuarios").document(reporte.usuarioId)
+
         firestore.runTransaction { tx ->
-            val snap = tx.get(incRef)
-            val contador = snap.getLong("contadorReportes") ?: 1
+            // Reads first
+            val incSnap = tx.get(incRef)
+            val userSnap = tx.get(userRef)
+            val puntosResult = calcularNuevosPuntos(userSnap, CiudadAlertaConfig.PUNTOS_UNIR_REPORTE, esInteraccion = false)
+
+            // Writes after all reads
+            val contador = incSnap.getLong("contadorReportes") ?: 1
             tx.update(incRef, "contadorReportes", contador + 1)
             tx.update(incRef, "reportantesIds", FieldValue.arrayUnion(reporte.usuarioId))
+            tx.set(reporteRef, reporte.copy(incidenciaId = incidenciaId))
+            if (puntosResult != null) {
+                tx.update(
+                    userRef,
+                    mapOf(
+                        "puntosCivicos" to puntosResult.puntosCivicos,
+                        "nivel" to puntosResult.nivel,
+                        "puntosInteraccionHoy" to puntosResult.puntosInteraccionHoy,
+                        "fechaUltimaInteraccion" to puntosResult.fechaUltimaInteraccion
+                    )
+                )
+            }
         }.await()
-        reportesCol.document().set(reporte.copy(incidenciaId = incidenciaId)).await()
     }
 
     suspend fun marcarResuelto(incidenciaId: String, usuarioId: String): Boolean {
         val marcaId = "${usuarioId}_${incidenciaId}"
         val marcaRef = marcasResueltoCol.document(marcaId)
         val incRef = incidenciasCol.document(incidenciaId)
+        val userRef = firestore.collection("usuarios").document(usuarioId)
 
-        if (marcaRef.get().await().exists()) return false
+        val success = firestore.runTransaction { tx ->
+            // Reads first
+            val marcaSnap = tx.get(marcaRef)
+            if (marcaSnap.exists()) {
+                return@runTransaction false
+            }
+            val incSnap = tx.get(incRef)
+            val userSnap = tx.get(userRef)
+            val puntosResult = calcularNuevosPuntos(userSnap, CiudadAlertaConfig.PUNTOS_MARCAR_RESUELTO, esInteraccion = false)
 
-        firestore.runBatch { batch ->
-            batch.set(marcaRef, MarcaResuelto(usuarioId, incidenciaId))
-            batch.update(incRef, "marcasResuelto", FieldValue.increment(1))
+            // Writes after all reads
+            tx.set(marcaRef, MarcaResuelto(usuarioId, incidenciaId))
+            val marcasActuales = incSnap.getLong("marcasResuelto") ?: 0
+            val nuevasMarcas = marcasActuales + 1
+            val updates = mutableMapOf<String, Any>(
+                "marcasResuelto" to nuevasMarcas
+            )
+            if (nuevasMarcas >= CiudadAlertaConfig.MARCAS_PARA_RESOLVER_N) {
+                updates["estado"] = EstadoIncidencia.RESUELTA.name
+                updates["fechaResuelta"] = System.currentTimeMillis()
+            }
+            tx.update(incRef, updates)
+            if (puntosResult != null) {
+                tx.update(
+                    userRef,
+                    mapOf(
+                        "puntosCivicos" to puntosResult.puntosCivicos,
+                        "nivel" to puntosResult.nivel,
+                        "puntosInteraccionHoy" to puntosResult.puntosInteraccionHoy,
+                        "fechaUltimaInteraccion" to puntosResult.fechaUltimaInteraccion
+                    )
+                )
+            }
+            true
         }.await()
 
-        val snap = incRef.get().await()
-        val total = snap.getLong("marcasResuelto") ?: 0
-        if (total >= CiudadAlertaConfig.MARCAS_PARA_RESOLVER_N) {
-            incRef.update(
-                mapOf(
-                    "estado" to EstadoIncidencia.RESUELTA.name,
-                    "fechaResuelta" to System.currentTimeMillis()
-                )
-            ).await()
-        }
-        return true
+        return success
     }
 
     companion object {
@@ -173,16 +236,19 @@ class IncidenciasRepository(
             guardarConfirmacionEnPrefs(usuarioId, incidenciaId)
         }
         val incRef = incidenciasCol.document(incidenciaId)
+        val userRef = if (usuarioId.isNotBlank()) firestore.collection("usuarios").document(usuarioId) else null
 
         firestore.runTransaction { transaction ->
+            // Reads first
             val snapshot = transaction.get(incRef)
-
             check(snapshot.exists()) {
                 "La incidencia ya no existe."
             }
+            val userSnap = if (userRef != null) transaction.get(userRef) else null
+            val puntosResult = if (userSnap != null) calcularNuevosPuntos(userSnap, CiudadAlertaConfig.PUNTOS_CONFIRMAR_SIGUE_AHI, esInteraccion = true) else null
 
+            // Writes after all reads
             val estado = snapshot.getString("estado")
-
             val updates = mutableMapOf<String, Any>(
                 "contadorConfirmaciones" to FieldValue.increment(1),
                 "ultimaVerificacionNotificada" to System.currentTimeMillis()
@@ -195,6 +261,18 @@ class IncidenciasRepository(
             }
 
             transaction.update(incRef, updates)
+
+            if (userRef != null && puntosResult != null) {
+                transaction.update(
+                    userRef,
+                    mapOf(
+                        "puntosCivicos" to puntosResult.puntosCivicos,
+                        "nivel" to puntosResult.nivel,
+                        "puntosInteraccionHoy" to puntosResult.puntosInteraccionHoy,
+                        "fechaUltimaInteraccion" to puntosResult.fechaUltimaInteraccion
+                    )
+                )
+            }
         }.await()
     }
 
@@ -272,4 +350,47 @@ class IncidenciasRepository(
             }
         awaitClose { listener.remove() }
     }
+
+    suspend fun obtenerEstadisticasPorCiudad(ciudad: String): EstadisticasData {
+        val queryBase = incidenciasCol.whereEqualTo("ocultoDelMapa", false)
+        val queryCiudad = if (ciudad.isNotBlank() && ciudad != "Todas las zonas") {
+            queryBase.whereEqualTo("ciudad", ciudad)
+        } else {
+            queryBase
+        }
+
+        val total = queryCiudad.count().get(com.google.firebase.firestore.AggregateSource.SERVER).await().count
+        val activas = queryCiudad.whereEqualTo("estado", EstadoIncidencia.ACTIVA.name).count().get(com.google.firebase.firestore.AggregateSource.SERVER).await().count
+        val resueltas = queryCiudad.whereEqualTo("estado", EstadoIncidencia.RESUELTA.name).count().get(com.google.firebase.firestore.AggregateSource.SERVER).await().count
+
+        val conteoPorCategoria = mutableMapOf<String, Long>()
+        for (cat in Categoria.CATALOGO) {
+            val countCat = queryCiudad.whereEqualTo("categoria", cat.nombre).count().get(com.google.firebase.firestore.AggregateSource.SERVER).await().count
+            conteoPorCategoria[cat.nombre] = countCat
+        }
+
+        val snapResueltas = queryCiudad.whereEqualTo("estado", EstadoIncidencia.RESUELTA.name).get().await()
+        val listaResueltas = snapResueltas.toObjects(Incidencia::class.java).filter { it.fechaResuelta != null && it.fechaResuelta > it.fechaCreacion }
+        val tiempoPromedioMs = if (listaResueltas.isNotEmpty()) {
+            listaResueltas.sumOf { (it.fechaResuelta ?: 0L) - it.fechaCreacion } / listaResueltas.size
+        } else {
+            0L
+        }
+
+        return EstadisticasData(
+            total = total,
+            activas = activas,
+            resueltas = resueltas,
+            conteoPorCategoria = conteoPorCategoria,
+            tiempoPromedioMs = tiempoPromedioMs
+        )
+    }
 }
+
+data class EstadisticasData(
+    val total: Long,
+    val activas: Long,
+    val resueltas: Long,
+    val conteoPorCategoria: Map<String, Long>,
+    val tiempoPromedioMs: Long
+)

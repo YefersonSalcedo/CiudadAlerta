@@ -12,6 +12,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class AuthRepository(
@@ -82,6 +85,18 @@ class AuthRepository(
         } catch (e: Exception) {
             Log.e("AuthRepository", "Error actualizando fcmToken: ${e.message}", e)
         }
+    }
+
+    fun observarPerfil(uid: String): Flow<Usuario?> = callbackFlow {
+        val listener = firestore.collection("usuarios").document(uid)
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                trySend(snap?.toObject(Usuario::class.java))
+            }
+        awaitClose { listener.remove() }
     }
 
     fun cerrarSesion() {

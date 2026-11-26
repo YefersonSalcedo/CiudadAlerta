@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,13 +38,14 @@ fun StatsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         val loc = try { obtenerUbicacionActual(context) } catch (_: Exception) { null }
         if (loc != null) {
-            viewModel.cargarEstadisticas(loc.latitude, loc.longitude)
+            viewModel.cargarEstadisticas(loc.latitude, loc.longitude, context)
         } else {
-            viewModel.cargarEstadisticas(7.5778, -75.4044)
+            viewModel.cargarEstadisticas(7.5778, -75.4044, context)
         }
     }
 
@@ -150,7 +153,16 @@ fun StatsScreen(
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                         Button(
-                            onClick = { viewModel.cargarEstadisticas() },
+                            onClick = {
+                                scope.launch {
+                                    val loc = try { obtenerUbicacionActual(context) } catch (_: Exception) { null }
+                                    if (loc != null) {
+                                        viewModel.cargarEstadisticas(loc.latitude, loc.longitude, context)
+                                    } else {
+                                        viewModel.cargarEstadisticas(7.5778, -75.4044, context)
+                                    }
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null)

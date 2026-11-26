@@ -20,8 +20,24 @@ data class Usuario(
     val fotoUrl: String? = null,
     val puntosCivicos: Int = 0,
     val nivel: Int = 1,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    val puntosInteraccionHoy: Int = 0,
+    val fechaUltimaInteraccion: String = ""
 )
+
+fun extraerCiudadDeDireccion(direccion: String): String {
+    if (direccion.isBlank()) return "Tu ciudad"
+    val partes = direccion.split(",").map { it.trim() }
+    return if (partes.size >= 3) {
+        partes[partes.size - 3]
+    } else if (partes.size == 2) {
+        partes[0]
+    } else if (partes.isNotEmpty() && partes[0].isNotBlank()) {
+        partes[0]
+    } else {
+        "Tu ciudad"
+    }
+}
 
 data class Incidencia(
     @DocumentId val id: String = "",
@@ -41,8 +57,14 @@ data class Incidencia(
     val ultimaVerificacionNotificada: Long = System.currentTimeMillis(),
     val severidadEstimada: String = "Media",
     val ocultoDelMapa: Boolean = false,
-    val descripcion: String = ""
+    val descripcion: String = "",
+    val ciudad: String = ""
 ) {
+    fun obtenerCiudadEfectiva(): String {
+        if (ciudad.isNotBlank()) return ciudad
+        return extraerCiudadDeDireccion(ubicacion.direccionAproximada)
+    }
+
     fun necesitaReverificacion(ahora: Long = System.currentTimeMillis()): Boolean {
         if (estado != EstadoIncidencia.ACTIVA) return false
         val msLimite = CiudadAlertaConfig.TIEMPO_REVERIFICACION_X_HORAS * 3600 * 1000L

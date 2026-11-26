@@ -24,4 +24,13 @@ object CiudadAlertaConfig {
 
     /** Número telefónico de la línea de emergencias. */
     const val LINEA_EMERGENCIAS_123 = "123"
+
+    // Puntos cívicos por acciones
+    const val PUNTOS_CREAR_INCIDENCIA = 10
+    const val PUNTOS_UNIR_REPORTE = 5
+    const val PUNTOS_CONFIRMAR_SIGUE_AHI = 2
+    const val PUNTOS_MARCAR_RESUELTO = 3
+    const val PUNTOS_COMENTAR = 1
+    const val PUNTOS_DENUNCIAR = 0
+    const val TOPE_PUNTOS_INTERACCION_DIA = 20
 }

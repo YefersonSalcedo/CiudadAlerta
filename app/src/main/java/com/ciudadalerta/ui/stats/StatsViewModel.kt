@@ -1,14 +1,14 @@
 package com.ciudadalerta.ui.stats
 
+import android.content.Context
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ciudadalerta.data.model.Categoria
-import com.ciudadalerta.data.model.EstadoIncidencia
-import com.ciudadalerta.data.model.Incidencia
+import com.ciudadalerta.data.model.extraerCiudadDeDireccion
+import com.ciudadalerta.data.repository.EstadisticasData
 import com.ciudadalerta.data.repository.IncidenciasRepository
-import com.ciudadalerta.data.util.GeoUtils
-import com.ciudadalerta.ui.map.MapViewModel
+import com.ciudadalerta.data.util.obtenerDireccion
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,30 +55,27 @@ class StatsViewModel(
         cargarEstadisticas()
     }
 
-    fun cargarEstadisticas(lat: Double = 7.5778, lng: Double = -75.4044) {
+    fun cargarEstadisticas(lat: Double = 7.5778, lng: Double = -75.4044, context: Context? = null) {
         _uiState.value = StatsUiState.Loading
         viewModelScope.launch {
             try {
-                val todas = incidenciasRepository.obtenerTodasLasIncidencias()
-                if (todas.isEmpty()) {
+                val ciudadActual = if (context != null) {
+                    val dir = obtenerDireccion(context, lat, lng)
+                    extraerCiudadDeDireccion(dir).ifBlank { "Tarazá" }
+                } else {
+                    "Tarazá"
+                }
+
+                val statsCiudadData = incidenciasRepository.obtenerEstadisticasPorCiudad(ciudadActual)
+                val statsGlobalData = incidenciasRepository.obtenerEstadisticasPorCiudad("Todas las zonas")
+
+                if (statsCiudadData.total == 0L && statsGlobalData.total == 0L) {
                     _uiState.value = StatsUiState.Empty
                     return@launch
                 }
 
-                val enZona = todas.filter { inc ->
-                    GeoUtils.distanciaMetros(
-                        lat, lng,
-                        inc.ubicacion.latitud, inc.ubicacion.longitud
-                    ) <= (MapViewModel.RADIO_ZONA_KM * 1000.0)
-                }
-
-                val ciudadDetectada = listOf("Tarazá", "Medellín", "Caucasia", "Bogotá", "Cali").firstOrNull { c ->
-                    enZona.any { it.ubicacion.direccionAproximada.contains(c, ignoreCase = true) }
-                } ?: "Tu ciudad"
-
-                val listCiudad = if (enZona.isNotEmpty()) enZona else todas
-                val statsCiudad = calcularStats(listCiudad, ciudadDetectada)
-                val statsGlobal = calcularStats(todas, "Todas las zonas")
+                val statsCiudad = construirStats(statsCiudadData, ciudadActual)
+                val statsGlobal = construirStats(statsGlobalData, "Todas las zonas")
 
                 _uiState.value = StatsUiState.Success(
                     statsCiudad = statsCiudad,
@@ -103,23 +100,12 @@ class StatsViewModel(
         }
     }
 
-    private fun calcularStats(
-        incidencias: List<Incidencia>,
+    private fun construirStats(
+        data: EstadisticasData,
         nombreCiudad: String
     ): IncidenciasStats {
-        val activas = incidencias.count { it.estado == EstadoIncidencia.ACTIVA }
-        val resueltas = incidencias.count { it.estado == EstadoIncidencia.RESUELTA }
-
-        val resueltasConFechas = incidencias.filter { inc ->
-            inc.estado == EstadoIncidencia.RESUELTA &&
-                    inc.fechaResuelta != null &&
-                    inc.fechaResuelta > inc.fechaCreacion
-        }
-
-        val tiempoPromedioTexto = if (resueltasConFechas.isNotEmpty()) {
-            val sumaMs = resueltasConFechas.sumOf { (it.fechaResuelta ?: 0L) - it.fechaCreacion }
-            val promedioMs = sumaMs / resueltasConFechas.size
-            val horas = promedioMs / (1000 * 3600.0)
+        val tiempoPromedioTexto = if (data.tiempoPromedioMs > 0) {
+            val horas = data.tiempoPromedioMs / (1000 * 3600.0)
             val dias = horas / 24.0
             if (dias >= 1.0) {
                 String.format(Locale.forLanguageTag("es-CO"), "%.1f días", dias)
@@ -130,15 +116,11 @@ class StatsViewModel(
             "Sin datos"
         }
 
-        val agrupadoPorCategoria = incidencias.groupBy { it.categoria }
-        val masReportada = agrupadoPorCategoria.maxByOrNull { entry ->
-            entry.value.sumOf { it.contadorReportes }
-        }?.key ?: "Ninguna"
-
-        val maximoCantidad = agrupadoPorCategoria.values.maxOfOrNull { it.size } ?: 1
+        val masReportada = data.conteoPorCategoria.maxByOrNull { it.value }?.key ?: "Ninguna"
+        val maximoCantidad = data.conteoPorCategoria.values.maxOfOrNull { it }?.toInt() ?: 1
 
         val conteoLista = Categoria.CATALOGO.map { cat ->
-            val cants = agrupadoPorCategoria[cat.nombre]?.size ?: 0
+            val cants = (data.conteoPorCategoria[cat.nombre] ?: 0L).toInt()
             CategoriaConteo(
                 categoriaNombre = cat.nombre,
                 cantidad = cants,
@@ -149,8 +131,8 @@ class StatsViewModel(
         }.sortedByDescending { it.cantidad }
 
         return IncidenciasStats(
-            totalActivas = activas,
-            totalResueltas = resueltas,
+            totalActivas = data.activas.toInt(),
+            totalResueltas = data.resueltas.toInt(),
             tiempoPromedioResolucionTexto = tiempoPromedioTexto,
             categoriaMasReportada = masReportada,
             conteoPorCategoria = conteoLista,

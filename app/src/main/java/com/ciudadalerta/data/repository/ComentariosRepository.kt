@@ -1,6 +1,8 @@
 package com.ciudadalerta.data.repository
 
+import com.ciudadalerta.data.config.CiudadAlertaConfig
 import com.ciudadalerta.data.model.Comentario
+import com.ciudadalerta.data.util.calcularNuevosPuntos
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -28,6 +30,26 @@ class ComentariosRepository(
     }
 
     suspend fun publicarComentario(comentario: Comentario) {
-        comentariosCol.document().set(comentario).await()
+        val comentarioRef = comentariosCol.document()
+        val userRef = firestore.collection("usuarios").document(comentario.usuarioId)
+        firestore.runTransaction { tx ->
+            // Reads first
+            val userSnap = tx.get(userRef)
+            val puntosResult = calcularNuevosPuntos(userSnap, CiudadAlertaConfig.PUNTOS_COMENTAR, esInteraccion = true)
+
+            // Writes after all reads
+            tx.set(comentarioRef, comentario)
+            if (puntosResult != null) {
+                tx.update(
+                    userRef,
+                    mapOf(
+                        "puntosCivicos" to puntosResult.puntosCivicos,
+                        "nivel" to puntosResult.nivel,
+                        "puntosInteraccionHoy" to puntosResult.puntosInteraccionHoy,
+                        "fechaUltimaInteraccion" to puntosResult.fechaUltimaInteraccion
+                    )
+                )
+            }
+        }.await()
     }
 }

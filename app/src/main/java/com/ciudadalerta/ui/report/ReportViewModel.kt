@@ -138,7 +138,8 @@ class ReportViewModel(
                         longitud = _longitud.value,
                         direccionAproximada = _direccionAproximada.value
                     ),
-                    fotoPrincipalUrl = urlFinal
+                    fotoPrincipalUrl = urlFinal,
+                    ciudad = extraerCiudadDeDireccion(_direccionAproximada.value)
                 )
                 val reporteInicial = Reporte(
                     usuarioId = usuarioId,

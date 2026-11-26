@@ -90,7 +90,7 @@ const CATEGORIAS = [
   { key: "semaforos", nombre: "Semáforos", sev: ["Media", "Alta"],
     titulos: ["Semáforo intermitente", "Semáforo apagado", "Señal de pare caída", "Semáforo peatonal sin funcionar"],
     descs: ["El semáforo parpadea en amarillo todo el día.", "No enciende ninguna luz en la intersección.", "La señal de pare está en el suelo desde la tormenta.", "El botón peatonal no responde y los carros no se detienen."] },
-  { key: "arboles", nombre: "Árboles (sin riesgo inminente)", sev: ["Baja", "Media"],
+  { key: "arboles", nombre: "Árboles", sev: ["Baja", "Media"],
     titulos: ["Árbol con ramas sobre el andén", "Ramas tapando el alumbrado", "Raíces que levantan el andén", "Árbol seco en el parque"],
     descs: ["Las ramas bajas estorban a los peatones.", "Las ramas cubren la luminaria y la calle queda oscura.", "Las raíces levantaron el andén y es difícil pasar.", "El árbol está seco y conviene podarlo."] },
   { key: "animales", nombre: "Animales abandonados", sev: ["Alta", "Media"],
@@ -203,6 +203,7 @@ function generar() {
         id, fotoLocal, meta: { esc, cat: cat.key, ciudad: z.ciudad, sector: sec.nombre, lat, lng, mia: !!mia, seguida, nRep: reportantes.length }, data: {
           titulo: cat.titulos[iTexto],
           categoria: cat.nombre,
+          ciudad: z.ciudad,
           ubicacion: { latitud: lat, longitud: lng, direccionAproximada: dir, geohash: ngeohash.encode(lat, lng, 9) },
           contadorReportes: reportantes.length,
           contadorConfirmaciones: nConf,

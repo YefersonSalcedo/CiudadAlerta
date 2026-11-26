@@ -51,7 +51,7 @@ sealed class Categoria(
     )
 
     object Arboles : Categoria(
-        nombre = "Árboles Caidos",
+        nombre = "Árboles",
         nombreCorto = "Árboles",
         colorHex = 0xFF5D4037,
         icono = Icons.Default.Forest
@@ -104,7 +104,8 @@ sealed class Categoria(
                         it.nombreCorto.equals(nombre, ignoreCase = true)
             } ?: CATALOGO.firstOrNull {
                 it.nombre.contains(nombre, ignoreCase = true) ||
-                        nombre.contains(it.nombre, ignoreCase = true)
+                        nombre.contains(it.nombre, ignoreCase = true) ||
+                        (nombre.contains("árbol", ignoreCase = true) && it is Arboles)
             } ?: Otros
         }
     }
