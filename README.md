@@ -6,17 +6,25 @@
 
 ---
 
+## Autores y Equipo de Desarrollo
+
+* **Yeferson Alexis Salcedo Preciado**
+* **Jhoan Esteban Echeverri Villa**
+* **Yeison Ochoa Cárdenas**
+
+---
+
 ## Servicios Integrados (8 Servicios del Sistema)
 
 CiudadAlerta integra los siguientes **8 servicios principales de Cloud & AI**:
 
-1. **Firebase Authentication (Google Sign-In):** Autenticación única mediante credenciales nativas de Google Credential Manager (sin acceso anónimo ni correos/contraseñas).
+1. **Firebase Authentication (Google Sign-In):** Autenticación única mediante credenciales nativas de Google Credential Manager (sin acceso anónimo ni contraseñas).
 2. **Cloud Firestore:** Base de datos NoSQL en tiempo real para almacenar el catálogo de incidencias, comentarios, marcas de resuelto, alertas y perfiles ciudadanos.
 3. **Cloud Storage:** Almacenamiento seguro de imágenes adjuntas en los reportes e incidencias (máximo 5 MB por imagen).
 4. **Firebase Cloud Messaging (FCM):** Notificaciones Push en segundo plano (*data-only*) para alertar a los seguidores sobre cambios de estado o solicitudes de confirmación.
 5. **Firebase App Check:** Protección de infraestructura y backend validando solicitudes legítimas mediante **Play Integrity** en producción y **Debug Provider** en desarrollo.
 6. **Google Gemini API (Google AI Studio):** Análisis multimodal con el modelo `gemini-3.5-flash-lite` para categorizar fotos, verificar espacio público, detectar riesgos vitales y filtrar violaciones de privacidad.
-7. **Google Maps SDK for Android:** Renderizado del mapa interactivo en tiempo real con marcadores personalizados, ubicación del usuario y agrupación de incidencias cercanas.
+7. **Google Maps SDK for Android:** Renderizado del mapa interactivo en tiempo real con marcadores personalizados, ubicación del usuario, agrupación de incidencias cercanas (clustering) y geocodificador.
 8. **Firebase Cloud Functions (v2):** Lógica de servidor serverless en Node.js/TypeScript (`notificarSeguidores` y tarea cron `verificar48h` para re-verificación a las 48 horas).
 
 ---
@@ -33,17 +41,19 @@ CiudadAlerta/
 │   │   ├── config/                     # Parámetros comunitarios globales (CiudadAlertaConfig)
 │   │   ├── fcm/                        # Servicio de notificaciones Push (CiudadAlertaMessagingService)
 │   │   ├── model/                      # Clases de datos (Incidencia, Usuario, Alerta, Reporte, etc.)
-│   │   ├── repository/                 # Repositorios (Auth, Incidencias, Notificaciones)
-│   │   └── util/                       # GeoUtils (geohash, distancias), LocationUtils, TimeUtils
+│   │   ├── repository/                 # Repositorios (Auth, Incidencias, Notificaciones, Comentarios)
+│   │   └── util/                       # GeoUtils (geohash, distancias), LocationUtils, TimeUtils, GamificationUtils
 │   ├── ui/                             # Capa de Interfaz de Usuario (Jetpack Compose + Material 3)
 │   │   ├── auth/                       # LoginScreen & AuthViewModel
+│   │   ├── components/                 # Componentes reutilizables de UI y estados
 │   │   ├── detail/                     # IncidentDetailScreen & DenounceBottomSheet
 │   │   ├── map/                        # MapScreen, NearbyListView & MapViewModel
 │   │   ├── myreports/                  # MyReportsScreen & MyReportsViewModel
 │   │   ├── navigation/                 # NavGraph & Rutas de navegación
 │   │   ├── notifications/              # NotificationsScreen & NotificationsViewModel
-│   │   ├── profile/                    # ProfileScreen & gestión de sesión
+│   │   ├── profile/                    # ProfileScreen, FollowedIncidentsScreen & gestión de sesión
 │   │   ├── report/                     # CreateReport, GeminiAnalysis, DuplicateDetection, ReportConfirmation
+│   │   ├── stats/                      # StatsScreen & StatsViewModel (Estadísticas cívicas)
 │   │   └── theme/                      # Tema Material 3, colores y tipografía
 │   └── MainActivity.kt                 # Punto de entrada de la app Android
 ├── functions/                          # Firebase Cloud Functions (TypeScript v2)
@@ -53,7 +63,9 @@ CiudadAlerta/
 │   ├── seed.js                         # Carga masiva en Firestore y Storage
 │   └── fotos/                          # Imágenes de prueba
 ├── docs/
-│   └── ARQUITECTURA.md                 # Documentación detallada de arquitectura
+│   ├── ARQUITECTURA.md                 # Documentación detallada de arquitectura
+│   ├── REGLAS_NEGOCIO.md               # Parámetros comunitarios y constantes de negocio
+│   └── FICHA_PROYECTO.md               # Ficha completa del proyecto para presentación
 └── README.md                           # Guía principal del proyecto
 ```
 
@@ -76,7 +88,7 @@ CiudadAlerta/
 
 1. **Captura / Selección de Foto:**
    - Toma con la cámara: la ubicación GPS se obtiene **automáticamente**.
-   - Selección desde galería: el usuario selecciona la ubicación **manualmente** mediante un selector de mapa.
+   - Selección desde galería: el usuario selecciona la ubicación **manualmente** mediante un selector de mapa (`LocationPickerDialog`).
 2. **Análisis con Gemini IA (`GeminiAnalysisService`):**
    - La imagen se envía a Gemini (`gemini-3.5-flash-lite`).
    - Retorna la categoría sugerida, descripción concisa (máx. 2 frases) y verifica privacidad (rostros, placas) o riesgo vital (incendios, cables sueltos). Si detecta riesgo vital, bloquea la app y sugiere llamar al **123**.
@@ -86,6 +98,17 @@ CiudadAlerta/
 4. **Publicación y Confirmación Comunitaria:**
    - La incidencia se guarda en Firestore (`incidencias/`) con su correspondiente `geohash`.
    - Se muestra en el mapa y queda disponible para confirmación ("Sigue ahí"), resolución comunitaria ($N$ marcas) o denuncias ($M$ denuncias para ocultación).
+   - Se asignan **Puntos Cívicos** al usuario y se calcula su nivel ciudadano.
+
+---
+
+## Reglas de Negocio Clave
+
+* **Marcas para resolver ($N = 3$):** Se requieren 3 marcas independientes de "Ya se solucionó" para cambiar el estado de la incidencia a `RESUELTA`.
+* **Denuncias para ocultar ($M = 3$):** Al acumular 3 denuncias de contenido inapropiado o falso, la incidencia se oculta automáticamente del mapa (`ocultoDelMapa = true`).
+* **Horas para re-verificación ($X = 48$h):** Transcurridas 48 horas sin novedades en una incidencia activa, Cloud Functions y la app solicitan re-verificación a los reportantes.
+* **Días visible resuelta ($4$ días):** Una incidencia en estado `RESUELTA` permanece visible en el mapa durante 4 días antes de dejar de mostrarse.
+* **Límite diario de reportes ($5$ por usuario):** Un usuario solo puede crear hasta 5 reportes nuevos en una ventana de 24 horas.
 
 ---
 
@@ -166,10 +189,8 @@ MAPS_API_KEY=tu_clave_de_google_maps_sdk
     match /comentarios/{comentarioId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
-      // Marcar "útil": solo puede cambiar utilCount
       allow update: if isAuthenticated() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['utilCount']);
-      // Borrar: solo el autor (quítalo si no se usa)
       allow delete: if isAuthenticated() && resource.data.usuarioId == request.auth.uid;
     }
 
@@ -193,7 +214,6 @@ MAPS_API_KEY=tu_clave_de_google_maps_sdk
 
       match /notificaciones/{notificacionId} {
         allow read: if isOwner(uid);
-        // El cliente solo puede modificar el campo "leida"; nadie del cliente crea ni elimina
         allow update: if isOwner(uid) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
         allow create, delete: if false;
@@ -201,7 +221,6 @@ MAPS_API_KEY=tu_clave_de_google_maps_sdk
     }
 }
 }
-
   ```
 - **App Check:** Registra el token de depuración impreso en Logcat (`DebugAppCheckProvider`) para probar en emuladores o dispositivos en modo debug.
 
@@ -250,7 +269,7 @@ node seed.js --clean
 
 1. **Contadores actualizados desde el cliente:**
    - Los incrementos de `contadorReportes`, `marcasResuelto` y `denunciasCount` se gestionan mediante transacciones y batches directamente desde la aplicación Android. En un entorno de producción a gran escala, es recomendable delegar estas validaciones a Cloud Functions o reglas de Firestore avanzadas para evitar manipulación por clientes modificados.
-2. **Notificaciones por seguimiento y no por zona:**
+2. **Notificaciones por seguimiento y no por geofencing dinámico:**
    - Las alertas y notificaciones Push FCM se envían exclusivamente a los usuarios registrados en los arreglos `reportantesIds` o `seguidoresIds` de cada incidencia. Actualmente no se calculan notificaciones en tiempo real por geofencing / ubicación dinámica del usuario.
-3. **Sistema de puntos y niveles no implementado:**
-   - Aunque el modelo de datos `Usuario` define las propiedades `puntosCivicos` y `nivel`, la lógica de gamificación (acumulación automática de puntos por reportar o confirmar incidencias y subir de nivel) aún no está activamente integrada en la experiencia de usuario.
+3. **Puntos y Niveles parciales:**
+   - Se realiza el cálculo y acumulación automática de Puntos Cívicos y Niveles en Firestore al crear o confirmar incidencias (y se visualizan en el perfil y pantalla de confirmación), pero aún no existe un catálogo de recompensas o convenios para su canje.

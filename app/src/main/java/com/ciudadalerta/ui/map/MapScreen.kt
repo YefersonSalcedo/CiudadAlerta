@@ -850,8 +850,9 @@ private fun TarjetaIncidenciaMapa(
     val categoria = Categoria.fromString(incidencia.categoria)
     val resuelta = incidencia.estado == EstadoIncidencia.RESUELTA
 
+    val tituloEfectivo = if (incidencia.descripcion.isNotBlank() && incidencia.descripcion.length > incidencia.titulo.length) incidencia.descripcion else incidencia.titulo
     val mostrarDescripcion = incidencia.descripcion.isNotBlank() &&
-            incidencia.descripcion.trim() != incidencia.titulo.trim()
+            incidencia.descripcion.trim() != tituloEfectivo.trim()
 
     val personasReportantes = incidencia.reportantesIds
         .filter { it.isNotBlank() }
@@ -974,7 +975,7 @@ private fun TarjetaIncidenciaMapa(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = incidencia.titulo.ifBlank { "Incidencia reportada" },
+                        text = tituloEfectivo.ifBlank { "Incidencia reportada" },
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,

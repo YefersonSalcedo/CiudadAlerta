@@ -131,7 +131,7 @@ class ReportViewModel(
                 }
 
                 val nuevaIncidencia = Incidencia(
-                    titulo = _descripcion.value.take(50).ifBlank { "Incidencia sin título" },
+                    titulo = _descripcion.value.trim().ifBlank { "Incidencia sin título" },
                     categoria = _categoria.value,
                     ubicacion = Ubicacion(
                         latitud = _latitud.value,

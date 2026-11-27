@@ -228,8 +228,9 @@ private fun TarjetaIncidenciaSeguida(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    val tituloEfectivo = if (incidencia.descripcion.isNotBlank() && incidencia.descripcion.length > incidencia.titulo.length) incidencia.descripcion else incidencia.titulo
                     Text(
-                        text = incidencia.titulo.ifBlank { "Incidencia reportada" },
+                        text = tituloEfectivo.ifBlank { "Incidencia reportada" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,

@@ -346,12 +346,28 @@ fun IncidentDetailContent(
                                 )
                             }
 
+                            val textoTitulo = when {
+                                inc.descripcion.isNotBlank() && inc.descripcion.length > inc.titulo.length -> inc.descripcion
+                                inc.titulo.isNotBlank() -> inc.titulo
+                                inc.descripcion.isNotBlank() -> inc.descripcion
+                                else -> "Incidencia reportada"
+                            }
+
                             Text(
-                                text = inc.titulo.ifBlank { "Incidencia reportada" },
+                                text = textoTitulo,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            if (inc.descripcion.isNotBlank() && inc.descripcion.trim() != textoTitulo.trim()) {
+                                Text(
+                                    text = inc.descripcion.trim(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = OnSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
 
                             // 3. DIRECCIÓN Y TIEMPO TRANSCURRIDO
                             Text(

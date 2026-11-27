@@ -186,7 +186,8 @@ fun MyReportsContent(
                                     Spacer(modifier = Modifier.width(12.dp))
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(inc.titulo, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                    val tituloEfectivo = if (inc.descripcion.isNotBlank() && inc.descripcion.length > inc.titulo.length) inc.descripcion else inc.titulo
+                                    Text(tituloEfectivo.ifBlank { "Incidencia reportada" }, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                                     Text(
                                         "${inc.ubicacion.direccionAproximada.ifBlank { "Sin dirección" }} • ${inc.contadorReportes} reportes",
                                         color = OnSurfaceVariant,
