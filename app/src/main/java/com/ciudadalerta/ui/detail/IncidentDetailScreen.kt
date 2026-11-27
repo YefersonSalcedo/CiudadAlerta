@@ -272,6 +272,24 @@ fun IncidentDetailContent(
 
             uiState.incidencia != null -> {
                 val inc = uiState.incidencia
+                val reportesAdicionales = remember(uiState.reportes, inc) {
+                    if (uiState.reportes.isEmpty()) {
+                        emptyList()
+                    } else {
+                        val primerReportanteId = inc.reportantesIds.firstOrNull()
+                        val reporteInicial = uiState.reportes.find { r ->
+                            (primerReportanteId != null && r.usuarioId == primerReportanteId) &&
+                                    (r.fotoUrl == inc.fotoPrincipalUrl || Math.abs(r.fecha - inc.fechaCreacion) < 30000)
+                        } ?: uiState.reportes.minByOrNull { it.fecha }
+
+                        if (reporteInicial != null) {
+                            uiState.reportes.filter { it.id != reporteInicial.id }
+                        } else {
+                            uiState.reportes
+                        }
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -522,24 +540,16 @@ fun IncidentDetailContent(
                     }
 
                     // 6. REPORTES DEL GRUPO
-                    val totalReportes = if (inc.contadorReportes > 0) {
-                        inc.contadorReportes
-                    } else if (inc.reportantesIds.isNotEmpty()) {
-                        inc.reportantesIds.size
-                    } else {
-                        uiState.reportes.size
-                    }
-
                     item {
                         HorizontalDivider()
                         Text(
-                            "Reportes del grupo ($totalReportes)",
+                            "Reportes del grupo (${reportesAdicionales.size})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
-                    if (uiState.reportes.isEmpty()) {
+                    if (reportesAdicionales.isEmpty()) {
                         item {
                             Text(
                                 "Aún no hay reportes adicionales para esta incidencia.",
@@ -549,7 +559,7 @@ fun IncidentDetailContent(
                             )
                         }
                     } else {
-                        items(uiState.reportes, key = { it.id }) { reporte ->
+                        items(reportesAdicionales, key = { it.id }) { reporte ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = SurfaceContainerLowest,
